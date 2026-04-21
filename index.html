@@ -21,6 +21,9 @@
   --azul:     #2563eb;
   --azul-bg:  #dbeafe;
   --nav-h:    64px;
+  --naranja:     #ea580c;
+  --naranja-bg:  #fff7ed;
+  --naranja-mid: #fed7aa;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
@@ -297,6 +300,49 @@ nav button.active .nav-dot { display: block; width: 4px; height: 4px; background
 .btn-confirm { background: var(--ink); color: white; }
 .btn-danger  { background: var(--rojo); color: white; }
 
+/* ═══════════════ COBROS PENDIENTES ═══════════════ */
+.cobros-hero {
+  background: var(--naranja); color: white;
+  border-radius: 18px; padding: 20px 22px; margin-bottom: 12px;
+  position: relative; overflow: hidden;
+}
+.cobros-hero::before { content:''; position:absolute; top:-20px; right:-20px; width:90px; height:90px; background:rgba(255,255,255,0.08); border-radius:50%; }
+.ch-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; opacity:0.65; margin-bottom:6px; }
+.ch-value { font-size:38px; font-weight:800; letter-spacing:-1.5px; line-height:1; margin-bottom:4px; }
+.ch-sub   { font-size:13px; opacity:0.6; font-weight:500; }
+.cobros-stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+.cobros-stat  { background:var(--surface); border-radius:14px; padding:14px; border:1px solid var(--border); }
+.cobros-stat .cs-val { font-size:22px; font-weight:800; letter-spacing:-0.5px; }
+.cobros-stat .cs-lbl { font-size:11px; color:var(--ink-3); font-weight:600; text-transform:uppercase; letter-spacing:0.4px; margin-top:3px; }
+
+.cobro-card {
+  background: var(--surface); border-radius: 14px; border: 1px solid var(--border);
+  padding: 16px; margin-bottom: 10px; position: relative;
+}
+.cobro-card.pagado { opacity: 0.55; }
+.cobro-card-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; }
+.cobro-cliente { font-size:16px; font-weight:800; letter-spacing:-0.2px; display:flex; align-items:center; gap:6px; }
+.cobro-monto   { font-size:20px; font-weight:800; color:var(--naranja); }
+.cobro-monto.pagado-monto { color: var(--verde); }
+.cobro-nota   { font-size:13px; color:var(--ink-2); line-height:1.5; margin-bottom:12px; }
+.cobro-footer { display:flex; justify-content:space-between; align-items:center; }
+.cobro-fecha  { font-size:11px; color:var(--ink-3); font-weight:500; }
+.cobro-badge  { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+.badge-pendiente { background:var(--naranja-bg); color:var(--naranja); border:1px solid var(--naranja-mid); }
+.badge-pagado    { background:var(--verde-bg);   color:var(--verde); }
+
+.cobro-actions { display:flex; gap:8px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border); }
+.btn-cobrar { flex:1; padding:10px; background:var(--verde); color:white; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; transition:opacity 0.15s; }
+.btn-cobrar:active { opacity:0.8; }
+.btn-del-cobro { padding:10px 14px; background:var(--bg); border:1px solid var(--border); border-radius:10px; font-size:13px; cursor:pointer; color:var(--rojo); font-weight:600; }
+
+.cobros-section-toggle { display:flex; align-items:center; justify-content:space-between; cursor:pointer; padding:4px 0; margin-bottom:10px; }
+.cobros-section-toggle span { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--ink-3); }
+.cobros-section-toggle .toggle-icon { font-size:12px; color:var(--ink-3); transition:transform 0.2s; }
+.cobros-section-toggle.open .toggle-icon { transform:rotate(180deg); }
+
+/* ═══════════════ END COBROS ═══════════════ */
+
 /* Emoji icon colors */
 .icon-bg-1 { background: #fef3c7; }
 .icon-bg-2 { background: #dcfce7; }
@@ -429,6 +475,35 @@ nav button.active .nav-dot { display: block; width: 4px; height: 4px; background
     <div id="mov-list"></div>
   </div>
 
+  <!-- COBROS PENDIENTES -->
+  <div class="page" id="page-cobros">
+    <div class="cobros-hero">
+      <div class="ch-label">💰 Total por cobrar</div>
+      <div class="ch-value" id="cobros-total">$0</div>
+      <div class="ch-sub" id="cobros-sub">0 cobros pendientes</div>
+    </div>
+    <div class="cobros-stats">
+      <div class="cobros-stat">
+        <div class="cs-val" id="cobros-count-pend">0</div>
+        <div class="cs-lbl">Pendientes</div>
+      </div>
+      <div class="cobros-stat">
+        <div class="cs-val" id="cobros-total-cobrado">$0</div>
+        <div class="cs-lbl">Cobrado total</div>
+      </div>
+    </div>
+    <div class="section-title">Pendientes de cobro</div>
+    <div id="cobros-pend-list"></div>
+    <div class="cobros-section-toggle" id="toggle-pagados" onclick="togglePagados()">
+      <span>✅ Ya cobrados</span>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div id="cobros-pagados-list" style="display:none"></div>
+    <button class="add-product-btn" style="margin-top:8px" onclick="openAddCobro()">
+      <span style="font-size:20px">+</span> Agregar cobro pendiente
+    </button>
+  </div>
+
   <!-- GESTIÓN -->
   <div class="page" id="page-gestion">
     <div class="section-title">Productos registrados</div>
@@ -443,6 +518,7 @@ nav button.active .nav-dot { display: block; width: 4px; height: 4px; background
     <button class="active" onclick="showPage('inventario')"><span class="nav-icon">📦</span>Inventario<span class="nav-dot"></span></button>
     <button onclick="showPage('registrar')"><span class="nav-icon">➕</span>Registrar<span class="nav-dot"></span></button>
     <button onclick="showPage('movimientos')"><span class="nav-icon">📋</span>Movimientos<span class="nav-dot"></span></button>
+    <button onclick="showPage('cobros')"><span class="nav-icon">💰</span>Cobros<span class="nav-dot"></span></button>
     <button onclick="showPage('gestion')"><span class="nav-icon">🛠️</span>Gestión<span class="nav-dot"></span></button>
   </nav>
 </div>
@@ -486,6 +562,34 @@ nav button.active .nav-dot { display: block; width: 4px; height: 4px; background
         <button class="filter-chip" onclick="selectIconBg('icon-bg-6',this)">🔴 Rojo</button>
       </div>
       <button class="save-btn" id="pm-save-btn" onclick="saveProduct()">💾 Guardar producto</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVO COBRO -->
+<div class="modal-overlay hidden" id="cobro-modal" onclick="if(event.target===this)closeCobroModal()">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>💰 Cobro pendiente</h2>
+      <button class="modal-close" onclick="closeCobroModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-card" style="margin-bottom:16px">
+        <div class="form-row">
+          <label>Cliente</label>
+          <input type="text" id="cobro-cliente-input" placeholder="Nombre" style="text-align:right">
+        </div>
+        <div class="form-row">
+          <label>Monto ($)</label>
+          <input type="number" id="cobro-monto-input" placeholder="0" inputmode="decimal" style="text-align:right">
+        </div>
+        <div class="form-row">
+          <label>Nota</label>
+          <input type="text" id="cobro-nota-input" placeholder="Opcional" style="text-align:right">
+        </div>
+      </div>
+      <button class="save-btn" onclick="saveNewCobro()">💾 Guardar cobro</button>
     </div>
   </div>
 </div>
@@ -564,8 +668,10 @@ function logout() {
 //  DATA
 // ═══════════════════════════════════════
 function getData() {
-  const def = { products: [], movements: [] };
-  return JSON.parse(localStorage.getItem('inv_data') || JSON.stringify(def));
+  const def = { products: [], movements: [], cobros: [] };
+  const raw = JSON.parse(localStorage.getItem('inv_data') || JSON.stringify(def));
+  if (!raw.cobros) raw.cobros = [];
+  return raw;
 }
 function saveData(d) { localStorage.setItem('inv_data', JSON.stringify(d)); }
 
@@ -584,7 +690,7 @@ function stockClass(current, initial) {
 // ═══════════════════════════════════════
 //  NAV
 // ═══════════════════════════════════════
-const PAGE_IDX = { inventario:0, registrar:1, movimientos:2, gestion:3 };
+const PAGE_IDX = { inventario:0, registrar:1, movimientos:2, cobros:3, gestion:4 };
 
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -594,6 +700,7 @@ function showPage(name) {
   if (name==='inventario')  renderInventario();
   if (name==='registrar')   initRegistrar();
   if (name==='movimientos') renderMovimientos();
+  if (name==='cobros')      renderCobros();
   if (name==='gestion')     renderGestion();
 }
 
@@ -992,6 +1099,124 @@ function spawnConfirm(title, body, confirmLabel, onConfirm, danger=false) {
   </div>`;
   document.body.appendChild(ov);
   ov.querySelector('#_cfbtn').onclick = () => { ov.remove(); onConfirm(); };
+}
+
+// ═══════════════════════════════════════
+//  COBROS PENDIENTES
+// ═══════════════════════════════════════
+let pagadosVisible = false;
+
+function getCobros() {
+  const d = getData();
+  return d.cobros || [];
+}
+function saveCobros(cobros) {
+  const d = getData();
+  d.cobros = cobros;
+  saveData(d);
+}
+
+function renderCobros() {
+  const cobros   = getCobros();
+  const pending  = cobros.filter(c => !c.pagado);
+  const pagados  = cobros.filter(c =>  c.pagado);
+  const totalPend  = pending.reduce((a,c) => a + c.monto, 0);
+  const totalCobrado = pagados.reduce((a,c) => a + c.monto, 0);
+
+  document.getElementById('cobros-total').textContent       = fmtMoney(totalPend);
+  document.getElementById('cobros-sub').textContent         = pending.length + ' cobro(s) pendiente(s)';
+  document.getElementById('cobros-count-pend').textContent  = pending.length;
+  document.getElementById('cobros-total-cobrado').textContent = fmtMoney(totalCobrado);
+
+  // Pendientes
+  const pList = document.getElementById('cobros-pend-list');
+  if (!pending.length) {
+    pList.innerHTML = `<div class="empty-state" style="padding:24px 0">
+      <div class="es-icon">🎉</div>
+      <div class="es-title">¡Todo al día!</div>
+      <div class="es-sub">No tienes cobros pendientes</div>
+    </div>`;
+  } else {
+    pList.innerHTML = pending.map(c => cobroCardHtml(c)).join('');
+  }
+
+  // Pagados
+  const toggler = document.getElementById('toggle-pagados');
+  toggler.querySelector('span').textContent = `✅ Ya cobrados (${pagados.length})`;
+  const pListPag = document.getElementById('cobros-pagados-list');
+  if (!pagados.length) {
+    pListPag.innerHTML = `<div style="text-align:center;color:var(--ink-3);font-size:13px;padding:12px 0">Sin cobros realizados aún</div>`;
+  } else {
+    pListPag.innerHTML = pagados.map(c => cobroCardHtml(c)).join('');
+  }
+}
+
+function cobroCardHtml(c) {
+  const isPagado = c.pagado;
+  const actions  = isPagado
+    ? `<button class="btn-del-cobro" style="flex:1" onclick="deleteCobro('${c.id}')">🗑️ Eliminar</button>`
+    : `<button class="btn-cobrar" onclick="marcarPagado('${c.id}')">✅ Marcar como cobrado</button>
+       <button class="btn-del-cobro" onclick="deleteCobro('${c.id}')">🗑️</button>`;
+  return `<div class="cobro-card ${isPagado?'pagado':''}">
+    <div class="cobro-card-top">
+      <div class="cobro-cliente">👤 ${c.cliente}</div>
+      <div class="cobro-monto ${isPagado?'pagado-monto':''}">${fmtMoney(c.monto)}</div>
+    </div>
+    ${c.nota ? `<div class="cobro-nota">${c.nota}</div>` : ''}
+    <div class="cobro-footer">
+      <span class="cobro-fecha">${fmtDate(c.ts)}</span>
+      <span class="cobro-badge ${isPagado?'badge-pagado':'badge-pendiente'}">
+        ${isPagado ? '✅ Cobrado' : '⏳ Pendiente'}
+      </span>
+    </div>
+    <div class="cobro-actions">${actions}</div>
+  </div>`;
+}
+
+function togglePagados() {
+  pagadosVisible = !pagadosVisible;
+  document.getElementById('cobros-pagados-list').style.display = pagadosVisible ? 'block' : 'none';
+  document.getElementById('toggle-pagados').classList.toggle('open', pagadosVisible);
+}
+
+function marcarPagado(id) {
+  const cobros = getCobros();
+  const c = cobros.find(x => x.id === id);
+  if (c) { c.pagado = true; c.tsPago = Date.now(); }
+  saveCobros(cobros);
+  renderCobros();
+  showToast('✅ Cobro marcado como pagado');
+}
+
+function deleteCobro(id) {
+  spawnConfirm('¿Eliminar cobro?', 'Se borrará este registro permanentemente.', 'Eliminar', () => {
+    const cobros = getCobros().filter(x => x.id !== id);
+    saveCobros(cobros);
+    renderCobros();
+    showToast('🗑️ Cobro eliminado');
+  }, true);
+}
+
+function openAddCobro() {
+  document.getElementById('cobro-cliente-input').value = '';
+  document.getElementById('cobro-monto-input').value   = '';
+  document.getElementById('cobro-nota-input').value    = '';
+  document.getElementById('cobro-modal').classList.remove('hidden');
+}
+function closeCobroModal() { document.getElementById('cobro-modal').classList.add('hidden'); }
+
+function saveNewCobro() {
+  const cliente = document.getElementById('cobro-cliente-input').value.trim();
+  const monto   = parseFloat(document.getElementById('cobro-monto-input').value);
+  const nota    = document.getElementById('cobro-nota-input').value.trim();
+  if (!cliente) { showToast('⚠️ Ingresa el nombre del cliente'); return; }
+  if (!monto || monto <= 0) { showToast('⚠️ Ingresa un monto válido'); return; }
+  const cobros = getCobros();
+  cobros.unshift({ id:'cb'+Date.now(), cliente, monto, nota, pagado:false, ts:Date.now(), tsPago:null });
+  saveCobros(cobros);
+  closeCobroModal();
+  renderCobros();
+  showToast('💰 Cobro pendiente agregado');
 }
 
 // ═══════════════════════════════════════
