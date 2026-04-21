@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Ventas de Sacos</title>
+<style>
+  :root {
+    --verde: #16a34a;
+    --verde-light: #dcfce7;
+    --verde-mid: #bbf7d0;
+    --rojo: #dc2626;
+    --rojo-light: #fee2e2;
+    --rojo-mid: #fecaca;
+    --blanco-border: #94a3b8;
+    --blanco-light: #f1f5f9;
+    --ink: #0f172a;
+    --ink-2: #475569;
+    --ink-3: #94a3b8;
+    --surface: #ffffff;
+    --bg: #f8fafc;
+    --border: #e2e8f0;
+    --nav-h: 64px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* ══════════════════════════════
+     LOGIN
+  ══════════════════════════════ */
+  #login-screen {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--ink);
+  }
+  #login-screen.hidden { display: none; }
+
+  .login-logo {
+    width: 72px; height: 72px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 34px;
+    margin-bottom: 20px;
+  }
+  .login-title {
+    color: white;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+    text-align: center;
+  }
+  .login-sub {
+    color: rgba(255,255,255,0.4);
+    font-size: 14px;
+    margin-bottom: 36px;
+    text-align: center;
+  }
+  .login-card {
+    background: white;
+    border-radius: 20px;
+    padding: 24px;
+    width: 100%;
+    max-width: 360px;
+  }
+  .login-field { margin-bottom: 14px; }
+  .login-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink-2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .login-field input {
+    width: 100%;
+    padding: 13px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-size: 16px;
+    outline: none;
+    transition: border-color 0.15s;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  .login-field input:focus { border-color: var(--ink); background: white; }
+
+  .login-error {
+    background: var(--rojo-light);
+    color: var(--rojo);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    display: none;
+  }
+  .login-error.show { display: block; }
+
+  .login-btn {
+    width: 100%;
+    padding: 15px;
+    background: var(--ink);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    margin-top: 4px;
+  }
+  .login-btn:active { opacity: 0.85; transform: scale(0.98); }
+
+  .login-hint {
+    text-align: center;
+    font-size: 12px;
+    color: rgba(255,255,255,0.25);
+    margin-top: 20px;
+  }
+
+  /* ══════════════════════════════
+     APP (oculta hasta login)
+  ══════════════════════════════ */
+  #app { display: none; }
+  #app.visible {
+    display: block;
+    padding-bottom: calc(var(--nav-h) + 8px);
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--ink);
+    color: white;
+    padding: 14px 20px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .header-icon {
+    width: 34px; height: 34px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+  }
+  header h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+  .header-right { display: flex; align-items: center; gap: 8px; }
+  .header-date {
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(255,255,255,0.15);
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+  .header-settings-btn {
+    background: rgba(255,255,255,0.12);
+    border: none;
+    color: white;
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .header-settings-btn:active { background: rgba(255,255,255,0.22); }
+
+  /* ── BOTTOM NAV ── */
+  nav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: var(--nav-h);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    z-index: 20;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
+  }
+  nav button {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 3px;
+    border: none; background: none;
+    color: var(--ink-3);
+    cursor: pointer;
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.2px;
+    padding: 8px 4px 10px;
+    transition: color 0.15s;
+  }
+  nav button .nav-icon { font-size: 20px; line-height: 1; }
+  nav button.active { color: var(--ink); }
+  nav button.active .nav-dot { display: block; width: 4px; height: 4px; background: var(--ink); border-radius: 50%; margin-top: 1px; }
+  .nav-dot { display: none; }
+
+  /* ── PAGES ── */
+  .page { display: none; padding: 16px; max-width: 480px; margin: 0 auto; animation: fadeIn 0.18s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── DASHBOARD ── */
+  .today-label { font-size: 12px; font-weight: 600; color: var(--ink-3); text-transform: capitalize; margin-bottom: 14px; }
+  .hero-card {
+    background: var(--ink); border-radius: 18px; padding: 22px 22px 20px;
+    margin-bottom: 12px; color: white; position: relative; overflow: hidden;
+  }
+  .hero-card::before { content:''; position:absolute; top:-30px; right:-30px; width:120px; height:120px; background:rgba(255,255,255,0.05); border-radius:50%; }
+  .hero-card::after  { content:''; position:absolute; bottom:-40px; right:20px; width:80px; height:80px; background:rgba(255,255,255,0.04); border-radius:50%; }
+  .hero-label { font-size: 12px; font-weight: 600; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
+  .hero-value { font-size: 42px; font-weight: 800; letter-spacing: -1.5px; line-height: 1; margin-bottom: 6px; }
+  .hero-sub   { font-size: 13px; opacity: 0.55; font-weight: 500; }
+
+  .color-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .color-card { border-radius: 14px; padding: 14px 12px; border: 1.5px solid transparent; }
+  .color-card.verde  { background: var(--verde-light); border-color: var(--verde-mid); }
+  .color-card.rojo   { background: var(--rojo-light);  border-color: var(--rojo-mid); }
+  .color-card.blanco { background: var(--blanco-light); border-color: var(--border); }
+  .cc-dot { width:10px; height:10px; border-radius:50%; margin-bottom:10px; }
+  .verde .cc-dot  { background: var(--verde); }
+  .rojo  .cc-dot  { background: var(--rojo); }
+  .blanco .cc-dot { background: #cbd5e1; border: 1.5px solid var(--blanco-border); }
+  .cc-label { font-size:11px; font-weight:600; color:var(--ink-2); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:4px; }
+  .cc-qty   { font-size:26px; font-weight:800; line-height:1; letter-spacing:-0.5px; }
+  .verde .cc-qty  { color: var(--verde); }
+  .rojo  .cc-qty  { color: var(--rojo); }
+  .blanco .cc-qty { color: var(--ink-2); }
+  .cc-money { font-size:12px; color:var(--ink-3); font-weight:500; margin-top:3px; }
+
+  .hist-card {
+    background: var(--surface); border-radius: 14px; padding: 16px;
+    border: 1px solid var(--border); display: flex; align-items: center;
+    justify-content: space-between; margin-bottom: 16px;
+  }
+  .hc-label { font-size:13px; color:var(--ink-2); font-weight:500; margin-bottom:4px; }
+  .hc-value { font-size:22px; font-weight:800; letter-spacing:-0.5px; }
+  .hc-sub   { font-size:12px; color:var(--ink-3); margin-top:2px; }
+  .hc-icon  { font-size:28px; opacity:0.4; }
+
+  .section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--ink-3); margin:18px 0 10px; }
+
+  .close-day-btn {
+    width:100%; padding:16px; background:var(--ink); color:white; border:none;
+    border-radius:14px; font-size:15px; font-weight:700; cursor:pointer;
+    transition:transform 0.1s, opacity 0.15s; letter-spacing:-0.2px;
+  }
+  .close-day-btn:active { transform:scale(0.98); opacity:0.85; }
+
+  /* ── REGISTRO ── */
+  .reg-section-label { font-size:15px; font-weight:700; color:var(--ink); margin-bottom:12px; }
+  .color-picker { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:24px; }
+  .color-btn {
+    padding:20px 8px 16px; border:2px solid var(--border); border-radius:14px;
+    background:var(--surface); cursor:pointer; text-align:center;
+    font-size:14px; font-weight:700; transition:all 0.15s; position:relative;
+  }
+  .color-btn .swatch { width:40px; height:40px; border-radius:50%; margin:0 auto 10px; transition:transform 0.15s; }
+  .color-btn:active .swatch { transform:scale(0.9); }
+  .swatch-verde  { background:var(--verde); box-shadow:0 4px 10px rgba(22,163,74,0.35); }
+  .swatch-rojo   { background:var(--rojo);  box-shadow:0 4px 10px rgba(220,38,38,0.35); }
+  .swatch-blanco { background:white; border:2px solid var(--border); box-shadow:0 2px 8px rgba(0,0,0,0.1); }
+  .color-btn.selected-verde  { border-color:var(--verde); background:var(--verde-light); color:var(--verde); }
+  .color-btn.selected-rojo   { border-color:var(--rojo);  background:var(--rojo-light);  color:var(--rojo); }
+  .color-btn.selected-blanco { border-color:var(--blanco-border); background:var(--blanco-light); color:var(--ink-2); }
+  .color-btn.selected-verde::after, .color-btn.selected-rojo::after, .color-btn.selected-blanco::after {
+    content:'✓'; position:absolute; top:7px; right:9px; font-size:12px; font-weight:800;
+  }
+  .color-btn.selected-verde::after  { color:var(--verde); }
+  .color-btn.selected-rojo::after   { color:var(--rojo); }
+  .color-btn.selected-blanco::after { color:var(--blanco-border); }
+
+  .inputs-card { background:var(--surface); border-radius:14px; border:1px solid var(--border); overflow:hidden; margin-bottom:16px; }
+  .input-row { display:flex; align-items:center; padding:14px 16px; gap:12px; border-bottom:1px solid var(--border); }
+  .input-row:last-child { border-bottom:none; }
+  .input-row label { font-size:14px; font-weight:600; color:var(--ink-2); flex:1; white-space:nowrap; }
+  .input-row input { border:none; outline:none; font-size:17px; font-weight:700; color:var(--ink); text-align:right; width:110px; background:transparent; }
+  .input-row input::placeholder { color:var(--ink-3); font-weight:400; }
+
+  .preview-card { background:var(--surface); border-radius:14px; border:1px solid var(--border); padding:16px; margin-bottom:16px; text-align:center; }
+  .prev-label  { font-size:12px; color:var(--ink-3); font-weight:500; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.4px; }
+  .prev-value  { font-size:32px; font-weight:800; color:var(--ink); letter-spacing:-1px; }
+  .prev-detail { font-size:13px; color:var(--ink-3); margin-top:4px; }
+
+  .register-btn {
+    width:100%; padding:17px; background:var(--ink); color:white; border:none;
+    border-radius:14px; font-size:16px; font-weight:700; cursor:pointer;
+    transition:transform 0.1s, opacity 0.15s; letter-spacing:-0.2px;
+  }
+  .register-btn:active { transform:scale(0.98); }
+  .register-btn:disabled { opacity:0.25; cursor:not-allowed; transform:none; }
+  .register-btn.ready-verde { background:var(--verde); }
+  .register-btn.ready-rojo  { background:var(--rojo); }
+
+  /* ── HISTORIAL ── */
+  .sale-item {
+    background:var(--surface); border-radius:14px; padding:14px 8px 14px 14px;
+    margin-bottom:8px; border:1px solid var(--border); display:flex; align-items:center; gap:12px;
+  }
+  .sale-pill { padding:4px 10px; border-radius:20px; font-size:12px; font-weight:700; flex-shrink:0; }
+  .pill-verde  { background:var(--verde-light); color:var(--verde); }
+  .pill-rojo   { background:var(--rojo-light);  color:var(--rojo); }
+  .pill-blanco { background:var(--blanco-light); color:var(--ink-2); border:1px solid var(--border); }
+  .sale-info { flex:1; min-width:0; }
+  .sale-info .main   { font-size:14px; font-weight:600; }
+  .sale-info .detail { font-size:12px; color:var(--ink-3); margin-top:2px; }
+  .sale-subtotal { font-weight:800; font-size:16px; letter-spacing:-0.3px; }
+  .delete-btn {
+    background:none; border:none; color:var(--ink-3); font-size:20px; cursor:pointer;
+    padding:8px 10px; line-height:1; border-radius:8px; transition:all 0.15s; flex-shrink:0;
+  }
+  .delete-btn:active { background:var(--rojo-light); color:var(--rojo); }
+
+  .day-total-row {
+    background:var(--surface); border-radius:14px; padding:14px 16px;
+    border:1px solid var(--border); display:flex; justify-content:space-between;
+    align-items:center; margin-bottom:12px;
+  }
+  .dtr-label { font-size:12px; color:var(--ink-3); font-weight:500; margin-bottom:2px; }
+  .dtr-value { font-size:20px; font-weight:800; letter-spacing:-0.5px; }
+  .dtr-qty   { font-size:13px; color:var(--ink-2); font-weight:600; }
+
+  /* ── DÍAS ── */
+  .day-card { background:var(--surface); border-radius:14px; border:1px solid var(--border); margin-bottom:10px; overflow:hidden; }
+  .day-card-header { padding:16px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; transition:background 0.1s; }
+  .day-card-header:active { background:var(--bg); }
+  .day-date  { font-weight:700; font-size:14px; text-transform:capitalize; }
+  .day-qty   { font-size:12px; color:var(--ink-3); margin-top:3px; font-weight:500; }
+  .day-right { text-align:right; }
+  .day-total   { font-weight:800; font-size:18px; letter-spacing:-0.4px; }
+  .day-chevron { font-size:12px; color:var(--ink-3); margin-top:2px; }
+  .day-card-body { border-top:1px solid var(--border); padding:12px 16px; display:none; }
+  .day-card-body.open { display:block; }
+  .color-row { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #f1f5f9; font-size:14px; }
+  .color-row:last-child { border-bottom:none; }
+  .color-row .name  { flex:1; font-weight:600; }
+  .color-row .qty   { color:var(--ink-3); font-size:13px; }
+  .color-row .money { font-weight:700; font-size:14px; }
+
+  /* ── EMPTY STATE ── */
+  .empty-state { text-align:center; padding:48px 20px; color:var(--ink-3); }
+  .es-icon  { font-size:44px; margin-bottom:12px; opacity:0.5; }
+  .es-title { font-size:15px; font-weight:600; color:var(--ink-2); margin-bottom:6px; }
+  .es-sub   { font-size:13px; }
+
+  /* ══════════════════════════════
+     MODAL CONFIG / AJUSTES
+  ══════════════════════════════ */
+  .modal-overlay {
+    position:fixed; inset:0;
+    background:rgba(15,23,42,0.55);
+    backdrop-filter:blur(2px);
+    z-index:50;
+    display:flex; align-items:flex-end; justify-content:center;
+    animation:overlayIn 0.2s ease;
+  }
+  .modal-overlay.hidden { display:none; }
+  @keyframes overlayIn { from{opacity:0} to{opacity:1} }
+
+  .modal-sheet {
+    background:var(--surface);
+    border-radius:20px 20px 0 0;
+    padding:0;
+    width:100%; max-width:480px;
+    animation:sheetUp 0.22s ease;
+    max-height:90vh;
+    overflow-y:auto;
+  }
+  @keyframes sheetUp { from{transform:translateY(40px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+  .modal-handle {
+    width:36px; height:4px; background:var(--border);
+    border-radius:2px; margin:12px auto 0;
+  }
+  .modal-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 20px 12px;
+    border-bottom:1px solid var(--border);
+  }
+  .modal-header h2 { font-size:17px; font-weight:800; letter-spacing:-0.3px; }
+  .modal-close {
+    background:var(--bg); border:none; color:var(--ink-2);
+    width:30px; height:30px; border-radius:50%; font-size:16px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+
+  .modal-body { padding:20px; }
+
+  .config-section { margin-bottom:24px; }
+  .config-section-title {
+    font-size:11px; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.8px; color:var(--ink-3); margin-bottom:12px;
+  }
+  .config-card { background:var(--bg); border-radius:14px; overflow:hidden; border:1px solid var(--border); }
+  .config-row {
+    display:flex; align-items:center; padding:14px 16px;
+    gap:12px; border-bottom:1px solid var(--border);
+  }
+  .config-row:last-child { border-bottom:none; }
+  .config-row .cr-icon { font-size:18px; flex-shrink:0; width:24px; text-align:center; }
+  .config-row label { font-size:14px; font-weight:600; color:var(--ink-2); flex:1; }
+  .config-row input {
+    border:none; outline:none; font-size:15px; font-weight:600;
+    color:var(--ink); text-align:right; width:130px; background:transparent;
+  }
+  .config-row input::placeholder { color:var(--ink-3); font-weight:400; }
+
+  .config-note {
+    background:var(--rojo-light); border:1px solid var(--rojo-mid);
+    border-radius:10px; padding:12px 14px;
+    font-size:13px; color:var(--rojo); margin-bottom:16px;
+    display:flex; gap:8px; align-items:flex-start;
+    line-height:1.5;
+  }
+
+  .save-config-btn {
+    width:100%; padding:15px; background:var(--ink); color:white;
+    border:none; border-radius:12px; font-size:15px; font-weight:700;
+    cursor:pointer; transition:transform 0.1s, opacity 0.15s;
+    margin-bottom:10px;
+  }
+  .save-config-btn:active { transform:scale(0.98); opacity:0.85; }
+
+  .logout-btn {
+    width:100%; padding:14px; background:var(--rojo-light); color:var(--rojo);
+    border:none; border-radius:12px; font-size:15px; font-weight:700;
+    cursor:pointer; transition:opacity 0.15s;
+  }
+  .logout-btn:active { opacity:0.75; }
+
+  /* ── TOAST ── */
+  .toast {
+    position:fixed;
+    bottom:calc(var(--nav-h) + 12px); left:50%;
+    transform:translateX(-50%) translateY(8px);
+    background:var(--ink); color:white;
+    padding:12px 20px; border-radius:24px;
+    font-size:14px; font-weight:600; z-index:100;
+    opacity:0; transition:opacity 0.2s, transform 0.2s;
+    pointer-events:none; white-space:nowrap;
+    box-shadow:0 4px 20px rgba(0,0,0,0.2);
+  }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ── CONFIRM SHEET ── */
+  .confirm-overlay {
+    position:fixed; inset:0;
+    background:rgba(15,23,42,0.55);
+    backdrop-filter:blur(2px);
+    z-index:60;
+    display:flex; align-items:flex-end; justify-content:center;
+    padding-bottom:0;
+    animation:overlayIn 0.2s ease;
+  }
+  .confirm-box {
+    background:var(--surface); border-radius:20px 20px 0 0;
+    padding:28px 24px 36px; width:100%; max-width:480px;
+    animation:sheetUp 0.22s ease;
+  }
+  .confirm-box h3 { font-size:18px; font-weight:800; margin-bottom:8px; letter-spacing:-0.3px; }
+  .confirm-box p  { font-size:14px; color:var(--ink-2); margin-bottom:22px; line-height:1.5; }
+  .confirm-actions { display:flex; gap:10px; }
+  .confirm-actions button { flex:1; padding:14px; border-radius:12px; border:none; font-size:15px; font-weight:700; cursor:pointer; }
+  .btn-cancel  { background:var(--bg); color:var(--ink-2); }
+  .btn-confirm { background:var(--ink); color:white; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ LOGIN ══════════════════ -->
+<div id="login-screen">
+  <div class="login-logo">📦</div>
+  <div class="login-title">Ventas de Sacos</div>
+  <div class="login-sub">Ingresa para continuar</div>
+
+  <div class="login-card">
+    <div class="login-error" id="login-error">Usuario o contraseña incorrectos</div>
+
+    <div class="login-field">
+      <label>Usuario</label>
+      <input type="text" id="login-user" placeholder="Tu usuario" autocomplete="username"
+             onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()">
+    </div>
+    <div class="login-field">
+      <label>Contraseña</label>
+      <input type="password" id="login-pass" placeholder="Tu contraseña" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') doLogin()">
+    </div>
+    <button class="login-btn" onclick="doLogin()">Entrar</button>
+  </div>
+
+  <div class="login-hint">🔒 Acceso privado</div>
+</div>
+
+<!-- ══════════════════ APP ══════════════════ -->
+<div id="app">
+
+  <header>
+    <div class="header-left">
+      <div class="header-icon">📦</div>
+      <h1>Ventas de Sacos</h1>
+    </div>
+    <div class="header-right">
+      <div class="header-date" id="header-date"></div>
+      <button class="header-settings-btn" onclick="openConfig()" title="Ajustes">⚙️</button>
+    </div>
+  </header>
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <p class="today-label" id="today-label"></p>
+    <div class="hero-card">
+      <div class="hero-label">💰 Total del día</div>
+      <div class="hero-value" id="dash-total-day">$0</div>
+      <div class="hero-sub" id="dash-qty-day">0 sacos vendidos hoy</div>
+    </div>
+    <div class="color-cards">
+      <div class="color-card verde"><div class="cc-dot"></div><div class="cc-label">Verde</div><div class="cc-qty" id="dash-verde-qty">0</div><div class="cc-money" id="dash-verde-money">$0</div></div>
+      <div class="color-card rojo"> <div class="cc-dot"></div><div class="cc-label">Rojo</div> <div class="cc-qty" id="dash-rojo-qty">0</div> <div class="cc-money" id="dash-rojo-money">$0</div> </div>
+      <div class="color-card blanco"><div class="cc-dot"></div><div class="cc-label">Blanco</div><div class="cc-qty" id="dash-blanco-qty">0</div><div class="cc-money" id="dash-blanco-money">$0</div></div>
+    </div>
+    <div class="hist-card">
+      <div>
+        <div class="hc-label">Total acumulado</div>
+        <div class="hc-value" id="dash-total-all">$0</div>
+        <div class="hc-sub" id="dash-qty-all">0 sacos en total</div>
+      </div>
+      <div class="hc-icon">📊</div>
+    </div>
+    <button class="close-day-btn" onclick="confirmCloseDay()">Cerrar día y empezar nuevo →</button>
+  </div>
+
+  <!-- REGISTRO -->
+  <div class="page" id="page-registro">
+    <div class="reg-section-label">¿Qué color vendiste?</div>
+    <div class="color-picker">
+      <button class="color-btn" id="btn-verde"  onclick="selectColor('verde')"> <div class="swatch swatch-verde"></div>Verde</button>
+      <button class="color-btn" id="btn-rojo"   onclick="selectColor('rojo')">  <div class="swatch swatch-rojo"></div>Rojo</button>
+      <button class="color-btn" id="btn-blanco" onclick="selectColor('blanco')"><div class="swatch swatch-blanco"></div>Blanco</button>
+    </div>
+    <div class="inputs-card">
+      <div class="input-row"><label>Cantidad</label><input type="number" id="input-qty" min="1" value="1" inputmode="numeric" oninput="updatePreview()"></div>
+      <div class="input-row"><label>Precio por saco</label><input type="number" id="input-price" min="0" placeholder="$0" inputmode="decimal" oninput="updatePreview()"></div>
+    </div>
+    <div class="preview-card">
+      <div class="prev-label">Total a cobrar</div>
+      <div class="prev-value" id="preview-value">—</div>
+      <div class="prev-detail" id="preview-detail">Selecciona color y precio</div>
+    </div>
+    <button class="register-btn" id="register-btn" onclick="registerSale()" disabled>Registrar venta</button>
+  </div>
+
+  <!-- HISTORIAL DEL DÍA -->
+  <div class="page" id="page-historial">
+    <div id="historial-summary"></div>
+    <div class="section-title">Ventas de hoy</div>
+    <div id="sales-list"></div>
+  </div>
+
+  <!-- HISTORIAL DE DÍAS -->
+  <div class="page" id="page-dias">
+    <div class="section-title">Días anteriores</div>
+    <div id="days-list"></div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav>
+    <button class="active" onclick="showPage('dashboard')">
+      <span class="nav-icon">📊</span>Resumen<span class="nav-dot"></span>
+    </button>
+    <button onclick="showPage('registro')">
+      <span class="nav-icon">➕</span>Registrar<span class="nav-dot"></span>
+    </button>
+    <button onclick="showPage('historial')">
+      <span class="nav-icon">📋</span>Hoy<span class="nav-dot"></span>
+    </button>
+    <button onclick="showPage('dias')">
+      <span class="nav-icon">📅</span>Días<span class="nav-dot"></span>
+    </button>
+  </nav>
+
+</div><!-- /app -->
+
+<!-- ══════════════════ MODAL CONFIG ══════════════════ -->
+<div class="modal-overlay hidden" id="config-modal" onclick="handleModalClick(event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>⚙️ Ajustes</h2>
+      <button class="modal-close" onclick="closeConfig()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="config-note">
+        ⚠️ Cambia tu usuario y contraseña aquí. Después de guardar, deberás iniciar sesión de nuevo.
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-title">Credenciales de acceso</div>
+        <div class="config-card">
+          <div class="config-row">
+            <span class="cr-icon">👤</span>
+            <label>Usuario</label>
+            <input type="text" id="cfg-user" placeholder="Nuevo usuario" autocomplete="off">
+          </div>
+          <div class="config-row">
+            <span class="cr-icon">🔑</span>
+            <label>Contraseña nueva</label>
+            <input type="password" id="cfg-pass" placeholder="Nueva clave" autocomplete="new-password">
+          </div>
+          <div class="config-row">
+            <span class="cr-icon">🔒</span>
+            <label>Confirmar clave</label>
+            <input type="password" id="cfg-pass2" placeholder="Repite la clave" autocomplete="new-password">
+          </div>
+        </div>
+      </div>
+
+      <button class="save-config-btn" onclick="saveConfig()">💾 Guardar cambios</button>
+      <button class="logout-btn" onclick="confirmLogout()">🚪 Cerrar sesión</button>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+//  SEGURIDAD — credenciales en localStorage
+// ══════════════════════════════════════════
+const CRED_KEY   = 'sacos_creds';
+const SESSION_KEY = 'sacos_session';
+
+function getCredentials() {
+  const saved = localStorage.getItem(CRED_KEY);
+  if (saved) return JSON.parse(saved);
+  // Credenciales por defecto (primera vez)
+  return { user: 'paulo123', pass: 'paulo321' };
+}
+function saveCredentials(user, pass) {
+  localStorage.setItem(CRED_KEY, JSON.stringify({ user, pass }));
+}
+function isLoggedIn() {
+  return sessionStorage.getItem(SESSION_KEY) === 'ok';
+}
+function setSession()   { sessionStorage.setItem(SESSION_KEY, 'ok'); }
+function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
+
+// ── Login ──
+function doLogin() {
+  const user = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const creds = getCredentials();
+  const err = document.getElementById('login-error');
+
+  if (user === creds.user && pass === creds.pass) {
+    err.classList.remove('show');
+    setSession();
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+    initApp();
+  } else {
+    err.classList.add('show');
+    document.getElementById('login-pass').value = '';
+    document.getElementById('login-pass').focus();
+    // Shake animation
+    const card = document.querySelector('.login-card');
+    card.style.animation = 'none';
+    card.style.transform = 'translateX(-8px)';
+    setTimeout(() => { card.style.transition = 'transform 0.3s'; card.style.transform = 'none'; }, 10);
+    setTimeout(() => { card.style.transition = ''; card.style.animation = ''; }, 400);
+  }
+}
+
+// ── Config modal ──
+function openConfig() {
+  const creds = getCredentials();
+  document.getElementById('cfg-user').value  = creds.user;
+  document.getElementById('cfg-pass').value  = '';
+  document.getElementById('cfg-pass2').value = '';
+  document.getElementById('config-modal').classList.remove('hidden');
+}
+function closeConfig() {
+  document.getElementById('config-modal').classList.add('hidden');
+}
+function handleModalClick(e) {
+  if (e.target === document.getElementById('config-modal')) closeConfig();
+}
+function saveConfig() {
+  const user  = document.getElementById('cfg-user').value.trim();
+  const pass  = document.getElementById('cfg-pass').value;
+  const pass2 = document.getElementById('cfg-pass2').value;
+
+  if (!user) { showToast('⚠️ El usuario no puede estar vacío'); return; }
+  if (pass && pass !== pass2) { showToast('❌ Las contraseñas no coinciden'); return; }
+  if (pass && pass.length < 4) { showToast('⚠️ La clave debe tener al menos 4 caracteres'); return; }
+
+  const current = getCredentials();
+  saveCredentials(user, pass || current.pass);
+  closeConfig();
+  showToast('✅ Ajustes guardados — inicia sesión de nuevo');
+  setTimeout(() => logout(), 1800);
+}
+function confirmLogout() {
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `<div class="confirm-box">
+    <h3>¿Cerrar sesión?</h3>
+    <p>Tendrás que ingresar tu usuario y contraseña para volver a entrar.</p>
+    <div class="confirm-actions">
+      <button class="btn-cancel" onclick="this.closest('.confirm-overlay').remove()">Cancelar</button>
+      <button class="btn-confirm" onclick="logout(); this.closest('.confirm-overlay').remove()">Salir</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function logout() {
+  clearSession();
+  closeConfig();
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  document.getElementById('login-error').classList.remove('show');
+}
+
+// ══════════════════════════════════════════
+//  INIT — Verificar sesión al cargar
+// ══════════════════════════════════════════
+function initApp() {
+  updateDashboard();
+  document.getElementById('today-label').textContent = todayStr();
+  document.getElementById('header-date').textContent =
+    new Date().toLocaleDateString('es-CO', { day:'2-digit', month:'short' }).toUpperCase();
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (isLoggedIn()) {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+    initApp();
+  }
+});
+
+// ══════════════════════════════════════════
+//  LÓGICA DE VENTAS
+// ══════════════════════════════════════════
+let selectedColor = null;
+
+function getState() {
+  return JSON.parse(localStorage.getItem('sacos_state') || JSON.stringify({
+    today: todayStr(), sales: [], history: []
+  }));
+}
+function saveState(s) { localStorage.setItem('sacos_state', JSON.stringify(s)); }
+function todayStr() {
+  return new Date().toLocaleDateString('es-CO', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+}
+function todayKey() { return new Date().toISOString().slice(0,10); }
+function fmtMoney(n) { return '$' + Number(n).toLocaleString('es-CO'); }
+function timeNow() { return new Date().toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' }); }
+
+// ── NAV ──
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  const idx = { dashboard:0, registro:1, historial:2, dias:3 };
+  document.querySelectorAll('nav button')[idx[name]].classList.add('active');
+  if (name==='dashboard') updateDashboard();
+  if (name==='historial') updateHistorial();
+  if (name==='dias') updateDays();
+}
+
+// ── DASHBOARD ──
+function calcTotals(sales) {
+  const t = { verde:{qty:0,money:0}, rojo:{qty:0,money:0}, blanco:{qty:0,money:0} };
+  sales.forEach(s => { t[s.color].qty += s.qty; t[s.color].money += s.subtotal; });
+  return t;
+}
+function updateDashboard() {
+  const state = getState();
+  const t = calcTotals(state.sales);
+  const totalQty   = t.verde.qty   + t.rojo.qty   + t.blanco.qty;
+  const totalMoney = t.verde.money + t.rojo.money + t.blanco.money;
+
+  document.getElementById('dash-total-day').textContent = fmtMoney(totalMoney);
+  document.getElementById('dash-qty-day').textContent   = totalQty + ' sacos vendidos hoy';
+  document.getElementById('dash-verde-qty').textContent  = t.verde.qty;
+  document.getElementById('dash-verde-money').textContent = fmtMoney(t.verde.money);
+  document.getElementById('dash-rojo-qty').textContent   = t.rojo.qty;
+  document.getElementById('dash-rojo-money').textContent  = fmtMoney(t.rojo.money);
+  document.getElementById('dash-blanco-qty').textContent  = t.blanco.qty;
+  document.getElementById('dash-blanco-money').textContent = fmtMoney(t.blanco.money);
+
+  let allQty = totalQty, allMoney = totalMoney;
+  state.history.forEach(day => {
+    const ht = calcTotals(day.sales);
+    allQty   += ht.verde.qty   + ht.rojo.qty   + ht.blanco.qty;
+    allMoney += ht.verde.money + ht.rojo.money + ht.blanco.money;
+  });
+  document.getElementById('dash-total-all').textContent = fmtMoney(allMoney);
+  document.getElementById('dash-qty-all').textContent   = allQty + ' sacos en total';
+  document.getElementById('today-label').textContent    = state.today;
+}
+
+// ── REGISTRO ──
+function selectColor(color) {
+  selectedColor = color;
+  ['verde','rojo','blanco'].forEach(c => document.getElementById('btn-'+c).className = 'color-btn');
+  document.getElementById('btn-'+color).className = 'color-btn selected-'+color;
+  updatePreview();
+}
+function updatePreview() {
+  const qty   = parseInt(document.getElementById('input-qty').value) || 0;
+  const price = parseFloat(document.getElementById('input-price').value) || 0;
+  const btn   = document.getElementById('register-btn');
+  btn.className = 'register-btn';
+  if (selectedColor && qty > 0 && price > 0) {
+    const labels = { verde:'Verde', rojo:'Rojo', blanco:'Blanco' };
+    document.getElementById('preview-value').textContent  = fmtMoney(qty * price);
+    document.getElementById('preview-detail').textContent = qty + ' saco(s) ' + labels[selectedColor] + ' × ' + fmtMoney(price);
+    btn.disabled = false;
+    if (selectedColor==='verde') btn.classList.add('ready-verde');
+    if (selectedColor==='rojo')  btn.classList.add('ready-rojo');
+  } else {
+    document.getElementById('preview-value').textContent  = '—';
+    document.getElementById('preview-detail').textContent = 'Selecciona color y precio';
+    btn.disabled = true;
+  }
+}
+function registerSale() {
+  const qty   = parseInt(document.getElementById('input-qty').value);
+  const price = parseFloat(document.getElementById('input-price').value);
+  if (!selectedColor || !qty || !price) return;
+  const state = getState();
+  state.sales.push({ id:Date.now(), color:selectedColor, qty, price, subtotal:qty*price, time:timeNow() });
+  saveState(state);
+  selectedColor = null;
+  ['verde','rojo','blanco'].forEach(c => document.getElementById('btn-'+c).className = 'color-btn');
+  document.getElementById('input-qty').value = 1;
+  document.getElementById('input-price').value = '';
+  document.getElementById('preview-value').textContent  = '—';
+  document.getElementById('preview-detail').textContent = 'Selecciona color y precio';
+  document.getElementById('register-btn').disabled = true;
+  document.getElementById('register-btn').className = 'register-btn';
+  showToast('✅ Venta registrada');
+  updateDashboard();
+}
+
+// ── HISTORIAL ──
+function updateHistorial() {
+  const state   = getState();
+  const list    = document.getElementById('sales-list');
+  const summary = document.getElementById('historial-summary');
+  if (state.sales.length === 0) {
+    summary.innerHTML = '';
+    list.innerHTML = `<div class="empty-state"><div class="es-icon">📋</div><div class="es-title">Sin ventas aún</div><div class="es-sub">Ve a "Registrar" para anotar tu primera venta</div></div>`;
+    return;
+  }
+  const t = calcTotals(state.sales);
+  const totalMoney = t.verde.money + t.rojo.money + t.blanco.money;
+  const totalQty   = t.verde.qty   + t.rojo.qty   + t.blanco.qty;
+  summary.innerHTML = `<div class="day-total-row"><div><div class="dtr-label">Total acumulado hoy</div><div class="dtr-value">${fmtMoney(totalMoney)}</div></div><div class="dtr-qty">${totalQty} sacos</div></div>`;
+  list.innerHTML = [...state.sales].reverse().map(s => {
+    const labels = { verde:'Verde', rojo:'Rojo', blanco:'Blanco' };
+    return `<div class="sale-item">
+      <span class="sale-pill pill-${s.color}">${labels[s.color]}</span>
+      <div class="sale-info"><div class="main">${s.qty} saco(s)</div><div class="detail">${s.time} · ${fmtMoney(s.price)} c/u</div></div>
+      <div class="sale-subtotal">${fmtMoney(s.subtotal)}</div>
+      <button class="delete-btn" onclick="deleteSale(${s.id})">×</button>
+    </div>`;
+  }).join('');
+}
+function deleteSale(id) {
+  const state = getState();
+  state.sales = state.sales.filter(s => s.id !== id);
+  saveState(state);
+  updateHistorial();
+  updateDashboard();
+  showToast('🗑️ Venta eliminada');
+}
+
+// ── CERRAR DÍA ──
+function confirmCloseDay() {
+  const state = getState();
+  if (state.sales.length === 0) { showToast('No hay ventas para cerrar'); return; }
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `<div class="confirm-box">
+    <h3>¿Cerrar el día?</h3>
+    <p>Se guardará el resumen de hoy y empezarás desde cero. Puedes consultar días anteriores en "Días".</p>
+    <div class="confirm-actions">
+      <button class="btn-cancel" onclick="this.closest('.confirm-overlay').remove()">Cancelar</button>
+      <button class="btn-confirm" onclick="closeDay(); this.closest('.confirm-overlay').remove()">Cerrar día</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function closeDay() {
+  const state = getState();
+  const t = calcTotals(state.sales);
+  state.history.unshift({
+    date: state.today, key: todayKey(), sales: state.sales, totals: t,
+    totalMoney: t.verde.money + t.rojo.money + t.blanco.money,
+    totalQty:   t.verde.qty   + t.rojo.qty   + t.blanco.qty
+  });
+  state.sales = [];
+  state.today = todayStr();
+  saveState(state);
+  updateDashboard();
+  showToast('✅ Día cerrado y guardado');
+}
+
+// ── DÍAS ──
+function updateDays() {
+  const state = getState();
+  const list  = document.getElementById('days-list');
+  if (state.history.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="es-icon">📅</div><div class="es-title">Sin días cerrados</div><div class="es-sub">Cuando cierres el día aparecerá aquí</div></div>`;
+    return;
+  }
+  list.innerHTML = state.history.map((day, i) => {
+    const rows = ['verde','rojo','blanco'].map(c => {
+      if (!day.totals[c].qty) return '';
+      const labels = { verde:'Verde', rojo:'Rojo', blanco:'Blanco' };
+      return `<div class="color-row">
+        <span class="sale-pill pill-${c}">${labels[c]}</span>
+        <span class="name">${labels[c]}</span>
+        <span class="qty">${day.totals[c].qty} sacos</span>
+        <span class="money">${fmtMoney(day.totals[c].money)}</span>
+      </div>`;
+    }).join('');
+    return `<div class="day-card">
+      <div class="day-card-header" onclick="toggleDay(${i})">
+        <div><div class="day-date">${day.date}</div><div class="day-qty">${day.totalQty} sacos vendidos</div></div>
+        <div class="day-right"><div class="day-total">${fmtMoney(day.totalMoney)}</div><div class="day-chevron">▼</div></div>
+      </div>
+      <div class="day-card-body" id="day-body-${i}">${rows || '<div style="color:#aaa;font-size:13px">Sin ventas</div>'}</div>
+    </div>`;
+  }).join('');
+}
+function toggleDay(i) { document.getElementById('day-body-'+i).classList.toggle('open'); }
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>
