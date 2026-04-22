@@ -377,6 +377,7 @@ nav button.active .nav-dot { display: block; width: 4px; height: 4px; background
     </div>
     <div class="header-right">
       <div class="header-date" id="header-date"></div>
+      <span id="sync-badge" style="font-size:12px;opacity:0.8">☁️</span>
       <button class="header-settings-btn" onclick="openConfig()">⚙️</button>
     </div>
   </header>
@@ -536,6 +537,8 @@ nav button.active .nav-dot { display: block; width: 4px; height: 4px; background
         📤 Importar respaldo
         <input type="file" accept=".json" style="display:none" onchange="importarDatos(event)">
       </label>
+      <div class="config-section-title">☁️ Sincronización automática</div>
+      <div id="sync-status-block" style="margin-bottom:16px"></div>
       <div class="config-section-title">🔐 Credenciales de acceso</div>
       <div class="config-section-card">
         <div class="config-row"><span class="cr-icon">👤</span><label>Usuario</label><input type="text" id="cfg-user" autocomplete="off"></div>
@@ -642,7 +645,50 @@ function openConfig() {
   document.getElementById('cfg-user').value  = c.user;
   document.getElementById('cfg-pass').value  = '';
   document.getElementById('cfg-pass2').value = '';
+  // Sync status block
+  const sb = document.getElementById('sync-status-block');
+  if (hasSyncToken()) {
+    sb.innerHTML = `
+      <div style="background:var(--verde-bg);border:1px solid var(--verde-mid);border-radius:12px;padding:14px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;color:var(--verde);margin-bottom:4px">✅ Sincronización activa</div>
+        <div style="font-size:12px;color:var(--ink-2);line-height:1.5">Los datos se guardan en la nube automáticamente. Funcionará en cualquier dispositivo donde ingreses este token.</div>
+      </div>
+      <button class="save-btn" style="background:var(--rojo-bg);color:var(--rojo);margin-bottom:4px" onclick="desactivarSync()">❌ Desactivar sincronización</button>`;
+  } else {
+    sb.innerHTML = `
+      <div style="background:var(--amarillo-bg);border:1px solid var(--naranja-mid);border-radius:12px;padding:14px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;color:var(--amarillo);margin-bottom:4px">⚠️ Sin sincronización</div>
+        <div style="font-size:12px;color:var(--ink-2);line-height:1.5">Los datos solo existen en este navegador. Activa la sincronización para no perder nada.</div>
+      </div>
+      <div class="config-section-card" style="margin-bottom:10px">
+        <div class="config-row">
+          <span class="cr-icon">🔑</span>
+          <label>Token de acceso</label>
+          <input type="password" id="cfg-sync-token" placeholder="ghp_..." style="width:130px;text-align:right">
+        </div>
+      </div>
+      <button class="save-btn" style="background:var(--azul);margin-bottom:4px" onclick="activarSync()">☁️ Activar sincronización</button>`;
+  }
   document.getElementById('config-modal').classList.remove('hidden');
+}
+
+function activarSync() {
+  const token = document.getElementById('cfg-sync-token')?.value?.trim();
+  if (!token || !token.startsWith('ghp_')) { showToast('⚠️ Token inválido — debe empezar con ghp_'); return; }
+  setSyncToken(token);
+  closeConfig();
+  showToast('✅ Sincronización activada');
+  showSyncBadge('syncing');
+  loadFromCloud().then(r => { if(r) renderInventario(); });
+}
+
+function desactivarSync() {
+  spawnConfirm('¿Desactivar sincronización?','Los datos del dispositivo se mantendrán pero no se sincronizarán con la nube.','Desactivar', () => {
+    localStorage.removeItem('inv_sync_token');
+    closeConfig();
+    showSyncBadge('off');
+    showToast('Sincronización desactivada');
+  }, true);
 }
 function closeConfig() { document.getElementById('config-modal').classList.add('hidden'); }
 function saveConfig() {
@@ -672,6 +718,63 @@ function logout() {
 }
 
 // ═══════════════════════════════════════
+//  CLOUD SYNC — GitHub Gist
+// ═══════════════════════════════════════
+const GIST_ID   = '05f5e939eb95a1cf47d8c82f0d5b4ef3';
+const GIST_FILE = 'inventario-data.json';
+let   syncTimer = null;
+
+// El token NO está en el código — se guarda una vez en este dispositivo
+function getSyncToken() { return localStorage.getItem('inv_sync_token') || ''; }
+function setSyncToken(t) { localStorage.setItem('inv_sync_token', t); }
+function hasSyncToken()  { return !!getSyncToken(); }
+
+async function loadFromCloud() {
+  const token = getSyncToken();
+  if (!token) return null;
+  try {
+    showSyncBadge('syncing');
+    const resp = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: { Authorization: `token ${token}` }
+    });
+    if (!resp.ok) throw new Error('fail');
+    const gist   = await resp.json();
+    const remote = JSON.parse(gist.files[GIST_FILE].content);
+    if (!remote.cobros) remote.cobros = [];
+    localStorage.setItem('inv_data', JSON.stringify(remote));
+    showSyncBadge('ok');
+    return remote;
+  } catch(e) { showSyncBadge('error'); return null; }
+}
+
+async function pushToCloud(data) {
+  const token = getSyncToken();
+  if (!token) return;
+  try {
+    showSyncBadge('syncing');
+    await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      method: 'PATCH',
+      headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(data) } } })
+    });
+    showSyncBadge('ok');
+  } catch(e) { showSyncBadge('error'); }
+}
+
+function schedulePush(data) {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => pushToCloud(data), 1200);
+}
+
+function showSyncBadge(state) {
+  const el = document.getElementById('sync-badge');
+  if (!el) return;
+  const map = { syncing:['☁️','#64748b'], ok:['✅','#16a34a'], error:['⚠️','#dc2626'], off:['—','#94a3b8'] };
+  const [txt, color] = map[state] || map.off;
+  el.textContent = txt; el.style.color = color;
+}
+
+// ═══════════════════════════════════════
 //  DATA
 // ═══════════════════════════════════════
 function getData() {
@@ -680,7 +783,10 @@ function getData() {
   if (!raw.cobros) raw.cobros = [];
   return raw;
 }
-function saveData(d) { localStorage.setItem('inv_data', JSON.stringify(d)); }
+function saveData(d) {
+  localStorage.setItem('inv_data', JSON.stringify(d));
+  schedulePush(d);  // auto-sync en background
+}
 
 function fmtMoney(n) { return '$' + Number(n).toLocaleString('es-CO'); }
 function fmtDate(ts) { return new Date(ts).toLocaleDateString('es-CO', {day:'2-digit',month:'short'}); }
@@ -1276,10 +1382,14 @@ function saveNewCobro() {
 // ═══════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════
-function initApp() {
+async function initApp() {
   document.getElementById('header-date').textContent =
     new Date().toLocaleDateString('es-CO', {day:'2-digit', month:'short'}).toUpperCase();
+  // Mostrar datos locales inmediatamente (sin esperar la nube)
   renderInventario();
+  // Luego sincronizar con la nube y refrescar si hay cambios
+  const remote = await loadFromCloud();
+  if (remote) renderInventario();
 }
 
 window.addEventListener('DOMContentLoaded', () => {
