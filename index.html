@@ -529,7 +529,14 @@ nav button.active .nav-dot { display: block; width: 4px; height: 4px; background
     <div class="modal-handle"></div>
     <div class="modal-header"><h2>⚙️ Ajustes</h2><button class="modal-close" onclick="closeConfig()">✕</button></div>
     <div class="modal-body">
-      <div class="config-section-title">Credenciales de acceso</div>
+      <div class="config-section-title">💾 Mis datos</div>
+      <p style="font-size:13px;color:var(--ink-2);margin-bottom:12px;line-height:1.6">Los datos se guardan en este navegador. Exporta un respaldo cada cierto tiempo para no perderlos.</p>
+      <button class="save-btn" style="background:var(--azul);margin-bottom:8px" onclick="exportarDatos()">📥 Exportar respaldo (.json)</button>
+      <label class="save-btn" style="background:var(--surface);color:var(--ink);border:1.5px solid var(--border);display:block;text-align:center;cursor:pointer;margin-bottom:20px">
+        📤 Importar respaldo
+        <input type="file" accept=".json" style="display:none" onchange="importarDatos(event)">
+      </label>
+      <div class="config-section-title">🔐 Credenciales de acceso</div>
       <div class="config-section-card">
         <div class="config-row"><span class="cr-icon">👤</span><label>Usuario</label><input type="text" id="cfg-user" autocomplete="off"></div>
         <div class="config-row"><span class="cr-icon">🔑</span><label>Contraseña nueva</label><input type="password" id="cfg-pass" placeholder="••••" autocomplete="new-password"></div>
@@ -1099,6 +1106,53 @@ function spawnConfirm(title, body, confirmLabel, onConfirm, danger=false) {
   </div>`;
   document.body.appendChild(ov);
   ov.querySelector('#_cfbtn').onclick = () => { ov.remove(); onConfirm(); };
+}
+
+// ═══════════════════════════════════════
+//  EXPORTAR / IMPORTAR DATOS
+// ═══════════════════════════════════════
+function exportarDatos() {
+  const data    = getData();
+  const creds   = getCreds();
+  const backup  = { version: 1, fecha: new Date().toISOString(), data, creds };
+  const blob    = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url     = URL.createObjectURL(blob);
+  const fecha   = new Date().toISOString().slice(0, 10);
+  const a       = document.createElement('a');
+  a.href        = url;
+  a.download    = `inventario-respaldo-${fecha}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📥 Respaldo descargado');
+}
+
+function importarDatos(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const backup = JSON.parse(e.target.result);
+      if (!backup.data) throw new Error('Formato inválido');
+      spawnConfirm(
+        '¿Importar respaldo?',
+        `Esto reemplazará todos los datos actuales con el respaldo del ${backup.fecha ? backup.fecha.slice(0,10) : 'archivo seleccionado'}.`,
+        'Importar',
+        () => {
+          saveData(backup.data);
+          if (backup.creds) saveCreds(backup.creds.user, backup.creds.pass);
+          renderInventario();
+          closeConfig();
+          showToast('✅ Datos importados correctamente');
+        },
+        false
+      );
+    } catch {
+      showToast('❌ Archivo inválido o corrupto');
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
 }
 
 // ═══════════════════════════════════════
