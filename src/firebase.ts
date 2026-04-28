@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
 // Firebase Web API keys are public by design — security is enforced by Firestore Rules
 const firebaseConfig = {
@@ -11,7 +11,16 @@ const firebaseConfig = {
   appId: "1:162304629577:web:dae1f45eca1b3531a2d898",
 };
 
-initializeApp(firebaseConfig);
+let _db: Firestore | null = null;
+let _configured = false;
 
-export const isFirebaseConfigured = true;
-export const db = getFirestore();
+try {
+  initializeApp(firebaseConfig);
+  _db = getFirestore();
+  _configured = true;
+} catch (e) {
+  console.error('Firebase init error:', e);
+}
+
+export const isFirebaseConfigured = _configured;
+export const db = _db;
