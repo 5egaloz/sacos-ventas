@@ -18,15 +18,18 @@ const LS_INV = 'ventas-lena-inv';
 const FS_DOC = 'data';
 const FS_COL = 'ventas-sacos';
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
-};
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
 
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleString('es-CL', {
+const formatDate = (dateString: string) =>
+  new Date(dateString).toLocaleString('es-CL', {
     day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
+    hour: '2-digit', minute: '2-digit',
   });
+
+const toMonthKey = (dateString: string) => {
+  const d = new Date(dateString);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
 function App() {
@@ -45,7 +48,7 @@ function App() {
     return saved ? parseInt(saved, 10) : 0;
   });
 
-  // Derived metrics
+  // Derived metrics (all-time totals)
   const { totalRevenue, totalSacksSold, pendingRevenue } = useMemo(() => {
     let rev = 0, sacks = 0, pend = 0;
     transactions.forEach(tx => {
@@ -117,10 +120,12 @@ function App() {
       transactions,
       inventory,
       lastUpdated: new Date().toISOString(),
-    }).catch(err => {
-      setSyncError('Error al guardar en la nube.');
-      console.error(err);
-    });
+    })
+      .then(() => setSyncError(null))
+      .catch(err => {
+        setSyncError('Error al guardar en la nube.');
+        console.error(err);
+      });
   }, [transactions, inventory]);
 
   // Form states
@@ -128,6 +133,19 @@ function App() {
   const [salePrice, setSalePrice] = useState<string>('');
   const [saleStatus, setSaleStatus] = useState<PaymentStatus>('contado');
   const [restockAmount, setRestockAmount] = useState<string>('');
+
+  // History filter
+  const [monthFilter, setMonthFilter] = useState<string>('all');
+
+  const availableMonths = useMemo(() => {
+    const months = new Set(transactions.map(tx => toMonthKey(tx.date)));
+    return Array.from(months).sort().reverse();
+  }, [transactions]);
+
+  const filteredTransactions = useMemo(() => {
+    if (monthFilter === 'all') return transactions;
+    return transactions.filter(tx => toMonthKey(tx.date) === monthFilter);
+  }, [transactions, monthFilter]);
 
   const handleSaleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,7 +157,7 @@ function App() {
       return;
     }
     const newTx: Transaction = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       date: new Date().toISOString(),
       type: 'sale',
       sacks: s,
@@ -158,7 +176,7 @@ function App() {
     const amount = parseInt(restockAmount);
     if (isNaN(amount) || amount <= 0) return;
     const newTx: Transaction = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       date: new Date().toISOString(),
       type: 'restock',
       sacks: amount,
@@ -169,20 +187,23 @@ function App() {
   };
 
   const handleDelete = (id: string, type: 'sale' | 'restock', sacks: number) => {
+    if (type === 'restock' && inventory - sacks < 0) {
+      alert(
+        `No puedes eliminar este ingreso: el inventario quedaría en ${inventory - sacks} sacos.\n` +
+        `Elimina primero las ventas correspondientes.`
+      );
+      return;
+    }
     if (window.confirm('¿Estás seguro de que quieres eliminar este registro? Esto ajustará tu inventario.')) {
       setTransactions(prev => prev.filter(tx => tx.id !== id));
-      if (type === 'sale') {
-        setInventory(prev => prev + sacks);
-      } else {
-        setInventory(prev => prev - sacks);
-      }
+      setInventory(prev => type === 'sale' ? prev + sacks : prev - sacks);
     }
   };
 
   const handlePaymentStatusChange = (id: string, newStatus: PaymentStatus) => {
-    setTransactions(prev => prev.map(tx =>
-      tx.id === id ? { ...tx, paymentStatus: newStatus } : tx
-    ));
+    setTransactions(prev =>
+      prev.map(tx => tx.id === id ? { ...tx, paymentStatus: newStatus } : tx)
+    );
   };
 
   if (loading) {
@@ -211,8 +232,8 @@ function App() {
       <div className="dashboard-grid">
         <div className="stat-card">
           <h3>Inventario</h3>
-          <div className="value" style={{color: inventory < 10 ? 'var(--danger)' : 'var(--primary-color)'}}>
-            {inventory} <span style={{fontSize: '1rem', color: 'var(--text-muted)'}}>sacos</span>
+          <div className="value" style={{ color: inventory < 10 ? 'var(--danger)' : 'var(--primary-color)' }}>
+            {inventory} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>sacos</span>
           </div>
         </div>
         <div className="stat-card">
@@ -220,12 +241,12 @@ function App() {
           <div className="value">{totalSacksSold}</div>
         </div>
         <div className="stat-card">
-          <h3>Ingresos Totales</h3>
-          <div className="value" style={{color: 'var(--success)'}}>{formatCurrency(totalRevenue)}</div>
+          <h3>Ingresos Cobrados</h3>
+          <div className="value" style={{ color: 'var(--success)' }}>{formatCurrency(totalRevenue)}</div>
         </div>
         <div className="stat-card">
           <h3>Cobros Pendientes</h3>
-          <div className="value" style={{color: 'var(--danger)'}}>{formatCurrency(pendingRevenue)}</div>
+          <div className="value" style={{ color: 'var(--danger)' }}>{formatCurrency(pendingRevenue)}</div>
         </div>
       </div>
 
@@ -239,6 +260,7 @@ function App() {
               value={saleSacks}
               onChange={e => setSaleSacks(e.target.value)}
               placeholder="Ej: 5"
+              min="1"
               required
             />
           </label>
@@ -249,6 +271,7 @@ function App() {
               value={salePrice}
               onChange={e => setSalePrice(e.target.value)}
               placeholder="Ej: 20000"
+              min="0"
               required
             />
           </label>
@@ -272,17 +295,37 @@ function App() {
               value={restockAmount}
               onChange={e => setRestockAmount(e.target.value)}
               placeholder="Ej: 50"
+              min="1"
               required
             />
           </label>
-          <button type="submit" style={{backgroundColor: 'var(--success)', marginTop: 'auto'}}>Añadir Leña</button>
+          <button type="submit" style={{ backgroundColor: 'var(--success)', marginTop: 'auto' }}>Añadir Leña</button>
         </form>
       </div>
 
       <div className="history-section">
-        <h2>Historial Reciente</h2>
-        {transactions.length === 0 ? (
-          <div className="empty-state">No hay movimientos registrados aún. Empieza anotando leña o una venta.</div>
+        <h2>
+          Historial
+          <select
+            value={monthFilter}
+            onChange={e => setMonthFilter(e.target.value)}
+            style={{ fontSize: '0.85rem', fontWeight: 'normal', padding: '4px 8px', borderRadius: '8px', border: '1px solid #d1d5db' }}
+          >
+            <option value="all">Todos los meses</option>
+            {availableMonths.map(m => {
+              const [year, month] = m.split('-');
+              const label = new Date(parseInt(year), parseInt(month) - 1).toLocaleString('es-CL', { month: 'long', year: 'numeric' });
+              return <option key={m} value={m}>{label}</option>;
+            })}
+          </select>
+        </h2>
+
+        {filteredTransactions.length === 0 ? (
+          <div className="empty-state">
+            {monthFilter === 'all'
+              ? 'No hay movimientos registrados aún. Empieza anotando leña o una venta.'
+              : 'No hay movimientos para este período.'}
+          </div>
         ) : (
           <table>
             <thead>
@@ -291,24 +334,28 @@ function App() {
                 <th>Movimiento</th>
                 <th>Cantidad</th>
                 <th>Total ($)</th>
+                <th>$/Saco</th>
                 <th>Estado</th>
                 <th>Acción</th>
               </tr>
             </thead>
             <tbody>
-              {transactions.map(tx => (
+              {filteredTransactions.map(tx => (
                 <tr key={tx.id}>
                   <td>{formatDate(tx.date)}</td>
                   <td>{tx.type === 'sale' ? 'Venta' : 'Ingreso Inventario'}</td>
                   <td>
                     {tx.type === 'sale' ? (
-                      <span style={{color: 'var(--danger)', fontWeight: 'bold'}}>-{tx.sacks}</span>
+                      <span style={{ color: 'var(--danger)', fontWeight: 'bold' }}>-{tx.sacks}</span>
                     ) : (
-                      <span style={{color: 'var(--success)', fontWeight: 'bold'}}>+{tx.sacks}</span>
+                      <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>+{tx.sacks}</span>
                     )}
                   </td>
+                  <td>{tx.type === 'sale' ? formatCurrency(tx.totalPrice || 0) : '-'}</td>
                   <td>
-                    {tx.type === 'sale' ? formatCurrency(tx.totalPrice || 0) : '-'}
+                    {tx.type === 'sale' && tx.sacks > 0
+                      ? formatCurrency(Math.round((tx.totalPrice || 0) / tx.sacks))
+                      : '-'}
                   </td>
                   <td>
                     {tx.type === 'sale' && tx.paymentStatus && (
@@ -325,7 +372,7 @@ function App() {
                           color: tx.paymentStatus === 'contado' ? '#166534' : tx.paymentStatus === 'transferencia' ? '#1e40af' : '#991b1b',
                           border: 'none',
                           outline: 'none',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
                         }}
                       >
                         <option value="contado">CONTADO</option>
@@ -337,7 +384,7 @@ function App() {
                   <td>
                     <button
                       onClick={() => handleDelete(tx.id, tx.type, tx.sacks)}
-                      style={{backgroundColor: 'transparent', color: 'var(--danger)', padding: '4px 8px', fontSize: '0.8rem'}}
+                      style={{ backgroundColor: 'transparent', color: 'var(--danger)', padding: '4px 8px', fontSize: '0.8rem' }}
                     >
                       ❌
                     </button>
