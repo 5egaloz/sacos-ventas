@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
 
 type PaymentStatus = 'contado' | 'transferencia' | 'pendiente';
@@ -33,6 +33,7 @@ function App() {
   const [loading, setLoading] = useState(isFirebaseConfigured);
   const [syncError, setSyncError] = useState<string | null>(null);
   const initialLoadDone = useRef(false);
+  const skipNextSave = useRef(false);
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     const saved = localStorage.getItem(LS_TX);
@@ -60,33 +61,52 @@ function App() {
     return { totalRevenue: rev, totalSacksSold: sacks, pendingRevenue: pend };
   }, [transactions]);
 
-  // Load from Firestore on mount (overrides localStorage)
+  // Sync with Firestore in real time
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
       initialLoadDone.current = true;
       return;
     }
 
-    getDoc(doc(db, FS_COL, FS_DOC))
-      .then(snapshot => {
+    const unsubscribe = onSnapshot(
+      doc(db, FS_COL, FS_DOC),
+      (snapshot) => {
+        // Skip snapshots caused by our own pending write to avoid loops
+        if (snapshot.metadata.hasPendingWrites) return;
+
         if (snapshot.exists()) {
+          skipNextSave.current = true;
           const data = snapshot.data();
           setTransactions(data.transactions ?? []);
           setInventory(data.inventory ?? 0);
         }
-        initialLoadDone.current = true;
-      })
-      .catch(err => {
+
+        if (!initialLoadDone.current) {
+          initialLoadDone.current = true;
+          setLoading(false);
+        }
+      },
+      (err) => {
         setSyncError('Error al conectar con la nube. Usando datos locales.');
         console.error(err);
-        initialLoadDone.current = true;
-      })
-      .finally(() => setLoading(false));
+        if (!initialLoadDone.current) {
+          initialLoadDone.current = true;
+          setLoading(false);
+        }
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
 
-  // Persist to localStorage + Firestore on every change
+  // Persist to localStorage + Firestore on every local change
   useEffect(() => {
     if (!initialLoadDone.current) return;
+    // Update came from Firestore, skip saving back to avoid loops
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
 
     localStorage.setItem(LS_TX, JSON.stringify(transactions));
     localStorage.setItem(LS_INV, inventory.toString());
