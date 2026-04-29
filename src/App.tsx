@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
 
@@ -45,9 +45,20 @@ function App() {
   });
 
   // Derived metrics
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [totalSacksSold, setTotalSacksSold] = useState(0);
-  const [pendingRevenue, setPendingRevenue] = useState(0);
+  const { totalRevenue, totalSacksSold, pendingRevenue } = useMemo(() => {
+    let rev = 0, sacks = 0, pend = 0;
+    transactions.forEach(tx => {
+      if (tx.type === 'sale') {
+        sacks += tx.sacks;
+        if (tx.paymentStatus !== 'pendiente') {
+          rev += tx.totalPrice || 0;
+        } else {
+          pend += tx.totalPrice || 0;
+        }
+      }
+    });
+    return { totalRevenue: rev, totalSacksSold: sacks, pendingRevenue: pend };
+  }, [transactions]);
 
   // Load from Firestore on mount (overrides localStorage)
   useEffect(() => {
@@ -91,24 +102,6 @@ function App() {
       console.error(err);
     });
   }, [transactions, inventory]);
-
-  // Calculate metrics
-  useEffect(() => {
-    let rev = 0, sacks = 0, pend = 0;
-    transactions.forEach(tx => {
-      if (tx.type === 'sale') {
-        sacks += tx.sacks;
-        if (tx.paymentStatus !== 'pendiente') {
-          rev += tx.totalPrice || 0;
-        } else {
-          pend += tx.totalPrice || 0;
-        }
-      }
-    });
-    setTotalRevenue(rev);
-    setTotalSacksSold(sacks);
-    setPendingRevenue(pend);
-  }, [transactions]);
 
   // Form states
   const [saleSacks, setSaleSacks] = useState<string>('');
