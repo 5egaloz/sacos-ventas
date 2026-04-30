@@ -6,6 +6,7 @@
 <title>Control de Inventario</title>
 <!-- Firebase compat SDK (CDN) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
 :root {
@@ -361,12 +362,15 @@ nav button.active .nav-dot { display: block; width: 4px; height: 4px; background
 <div id="login-screen">
   <div class="login-logo">📦</div>
   <div class="login-title">Control de Inventario</div>
-  <div class="login-sub">Ingresa para continuar</div>
+  <div class="login-sub" id="login-sub">Ingresa para continuar</div>
   <div class="login-card">
-    <div class="login-error" id="login-error">Usuario o contraseña incorrectos</div>
-    <div class="login-field"><label>Usuario</label><input type="text" id="login-user" placeholder="Tu usuario" autocomplete="username" onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()"></div>
+    <div class="login-error" id="login-error">Email o contraseña incorrectos</div>
+    <div class="login-field"><label>Email</label><input type="email" id="login-user" placeholder="tu@email.com" autocomplete="username" onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()"></div>
     <div class="login-field"><label>Contraseña</label><input type="password" id="login-pass" placeholder="Tu contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()"></div>
-    <button class="login-btn" onclick="doLogin()">Entrar</button>
+    <button class="login-btn" id="login-submit" onclick="doLogin()">Entrar</button>
+    <div style="text-align:center;margin-top:14px;font-size:13px;color:var(--ink-2)">
+      <a href="#" id="toggle-mode" onclick="toggleAuthMode(event)" style="color:var(--ink);text-decoration:underline;cursor:pointer">¿Primera vez? Crear cuenta</a>
+    </div>
   </div>
   <div class="login-hint">🔒 Acceso privado</div>
 </div>
@@ -545,13 +549,13 @@ nav button.active .nav-dot { display: block; width: 4px; height: 4px; background
         <div style="font-size:13px;font-weight:700;color:var(--verde);margin-bottom:4px">✅ Firebase activo</div>
         <div style="font-size:12px;color:var(--ink-2);line-height:1.5">Los datos se sincronizan automáticamente en la nube. Funciona en cualquier dispositivo y sobrevive al borrar el caché del navegador.</div>
       </div>
-      <div class="config-section-title">🔐 Credenciales de acceso</div>
+      <div class="config-section-title">🔐 Cambiar contraseña</div>
       <div class="config-section-card">
-        <div class="config-row"><span class="cr-icon">👤</span><label>Usuario</label><input type="text" id="cfg-user" autocomplete="off"></div>
-        <div class="config-row"><span class="cr-icon">🔑</span><label>Contraseña nueva</label><input type="password" id="cfg-pass" placeholder="••••" autocomplete="new-password"></div>
-        <div class="config-row"><span class="cr-icon">🔒</span><label>Confirmar clave</label><input type="password" id="cfg-pass2" placeholder="••••" autocomplete="new-password"></div>
+        <div class="config-row"><span class="cr-icon">👤</span><label>Email</label><input type="text" id="cfg-email" disabled style="opacity:0.7"></div>
+        <div class="config-row"><span class="cr-icon">🔑</span><label>Nueva contraseña</label><input type="password" id="cfg-pass" placeholder="••••" autocomplete="new-password"></div>
+        <div class="config-row"><span class="cr-icon">🔒</span><label>Confirmar</label><input type="password" id="cfg-pass2" placeholder="••••" autocomplete="new-password"></div>
       </div>
-      <button class="save-btn" onclick="saveConfig()">💾 Guardar cambios</button>
+      <button class="save-btn" onclick="saveConfig()">💾 Cambiar contraseña</button>
       <button class="logout-btn-cfg" onclick="confirmLogout()">🚪 Cerrar sesión</button>
     </div>
   </div>
@@ -625,58 +629,69 @@ firebase.initializeApp({
   appId: "1:162304629577:web:dae1f45eca1b3531a2d898"
 });
 const db        = firebase.firestore();
+const auth      = firebase.auth();
 const STATE_REF = db.collection('ventas-sacos').doc('state');
-const CREDS_REF = db.collection('ventas-sacos').doc('creds');
 
 // ═══════════════════════════════════════
-//  AUTH
+//  AUTH — Firebase Email/Password
 // ═══════════════════════════════════════
-const CRED_KEY    = 'inv_creds';
-const SESSION_KEY = 'inv_session';
+let authMode = 'login'; // 'login' or 'register'
 
-function getCreds() {
-  const s = localStorage.getItem(CRED_KEY);
-  return s ? JSON.parse(s) : { user: 'paulo123', pass: 'paulo321' };
-}
-function saveCreds(u, p) {
-  const creds = { user: u, pass: p };
-  localStorage.setItem(CRED_KEY, JSON.stringify(creds));
-  CREDS_REF.set(creds).catch(() => {});
-}
-function isLoggedIn()   { return sessionStorage.getItem(SESSION_KEY) === 'ok'; }
-function setSession()   { sessionStorage.setItem(SESSION_KEY,'ok'); }
-function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
-
-async function syncCredsFromCloud() {
-  try {
-    const snap = await CREDS_REF.get();
-    if (snap.exists()) {
-      localStorage.setItem(CRED_KEY, JSON.stringify(snap.data()));
-    }
-  } catch(e) {}
-}
-
-function doLogin() {
-  const user = document.getElementById('login-user').value.trim();
-  const pass = document.getElementById('login-pass').value;
-  const c    = getCreds();
-  const err  = document.getElementById('login-error');
-  if (user === c.user && pass === c.pass) {
-    err.classList.remove('show');
-    setSession();
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('app').classList.add('visible');
-    initApp();
+function toggleAuthMode(e) {
+  if (e) e.preventDefault();
+  authMode = authMode === 'login' ? 'register' : 'login';
+  const submitBtn  = document.getElementById('login-submit');
+  const toggleLink = document.getElementById('toggle-mode');
+  const sub        = document.getElementById('login-sub');
+  const err        = document.getElementById('login-error');
+  if (authMode === 'register') {
+    submitBtn.textContent  = 'Crear cuenta';
+    toggleLink.textContent = '← Ya tengo cuenta';
+    sub.textContent        = 'Crea tu cuenta para empezar';
   } else {
-    err.classList.add('show');
-    document.getElementById('login-pass').value = '';
-    document.getElementById('login-pass').focus();
+    submitBtn.textContent  = 'Entrar';
+    toggleLink.textContent = '¿Primera vez? Crear cuenta';
+    sub.textContent        = 'Ingresa para continuar';
+  }
+  err.classList.remove('show');
+}
+
+function showLoginError(msg) {
+  const err = document.getElementById('login-error');
+  err.textContent = msg;
+  err.classList.add('show');
+  document.getElementById('login-pass').value = '';
+  document.getElementById('login-pass').focus();
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-user').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  if (!email || !pass) { showLoginError('Completa email y contraseña'); return; }
+
+  try {
+    if (authMode === 'register') {
+      if (pass.length < 6) { showLoginError('La contraseña debe tener al menos 6 caracteres'); return; }
+      await auth.createUserWithEmailAndPassword(email, pass);
+    } else {
+      await auth.signInWithEmailAndPassword(email, pass);
+    }
+    // onAuthStateChanged handles transitioning to the app
+  } catch(e) {
+    const msg =
+      (e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential')
+        ? 'Email o contraseña incorrectos'
+      : e.code === 'auth/email-already-in-use' ? 'Ese email ya está registrado'
+      : e.code === 'auth/weak-password'        ? 'La contraseña debe tener al menos 6 caracteres'
+      : e.code === 'auth/invalid-email'        ? 'Email inválido'
+      : e.code === 'auth/network-request-failed' ? 'Sin conexión a internet'
+      : (e.message || 'Error al autenticar');
+    showLoginError(msg);
   }
 }
 
 function openConfig() {
-  const c = getCreds();
-  document.getElementById('cfg-user').value  = c.user;
+  document.getElementById('cfg-email').value = auth.currentUser ? auth.currentUser.email : '';
   document.getElementById('cfg-pass').value  = '';
   document.getElementById('cfg-pass2').value = '';
   document.getElementById('config-modal').classList.remove('hidden');
@@ -684,52 +699,67 @@ function openConfig() {
 
 function closeConfig() { document.getElementById('config-modal').classList.add('hidden'); }
 
-function saveConfig() {
-  const user  = document.getElementById('cfg-user').value.trim();
+async function saveConfig() {
   const pass  = document.getElementById('cfg-pass').value;
   const pass2 = document.getElementById('cfg-pass2').value;
-  if (!user) { showToast('⚠️ Usuario no puede estar vacío'); return; }
-  if (pass && pass !== pass2) { showToast('❌ Las contraseñas no coinciden'); return; }
-  if (pass && pass.length < 4) { showToast('⚠️ Mínimo 4 caracteres'); return; }
-  const current = getCreds();
-  saveCreds(user, pass || current.pass);
-  closeConfig();
-  showToast('✅ Guardado — inicia sesión de nuevo');
-  setTimeout(logout, 1800);
+  if (!pass)               { showToast('⚠️ Escribe una nueva contraseña'); return; }
+  if (pass !== pass2)      { showToast('❌ Las contraseñas no coinciden'); return; }
+  if (pass.length < 6)     { showToast('⚠️ Mínimo 6 caracteres'); return; }
+  if (!auth.currentUser)   { showToast('❌ Sesión expirada'); return; }
+  try {
+    await auth.currentUser.updatePassword(pass);
+    showToast('✅ Contraseña actualizada');
+    closeConfig();
+  } catch(e) {
+    if (e.code === 'auth/requires-recent-login') {
+      showToast('⚠️ Cierra sesión y vuelve a entrar para cambiar la contraseña');
+    } else {
+      showToast('❌ ' + (e.message || 'Error'));
+    }
+  }
 }
 
 function confirmLogout() {
-  spawnConfirm('¿Cerrar sesión?', 'Tendrás que ingresar tus credenciales para volver.', 'Salir', logout, true);
+  spawnConfirm('¿Cerrar sesión?', 'Tendrás que ingresar tu email y contraseña para volver.', 'Salir', logout, true);
 }
 function logout() {
-  clearSession();
   closeConfig();
-  document.getElementById('app').classList.remove('visible');
-  document.getElementById('login-screen').classList.remove('hidden');
-  document.getElementById('login-user').value = '';
-  document.getElementById('login-pass').value = '';
-  document.getElementById('login-error').classList.remove('show');
+  if (unsubscribeSync) { unsubscribeSync(); unsubscribeSync = null; }
+  auth.signOut().catch(() => {});
 }
 
 // ═══════════════════════════════════════
-//  CLOUD SYNC — Firebase Firestore
+//  CLOUD SYNC — Firebase Firestore (real-time)
 // ═══════════════════════════════════════
-let syncTimer = null;
+let syncTimer       = null;
+let unsubscribeSync = null;
 
-async function loadFromCloud() {
-  try {
-    showSyncBadge('syncing');
-    const snap = await STATE_REF.get();
-    if (snap.exists()) {
-      const remote = snap.data();
-      if (!remote.cobros) remote.cobros = [];
-      localStorage.setItem('inv_data', JSON.stringify(remote));
-      showSyncBadge('ok');
-      return remote;
-    }
+function startCloudSync() {
+  if (unsubscribeSync) unsubscribeSync();
+  showSyncBadge('syncing');
+  unsubscribeSync = STATE_REF.onSnapshot((snap) => {
+    // Skip snapshots caused by our own pending write to avoid loops
+    if (snap.metadata.hasPendingWrites) return;
+    if (!snap.exists) { showSyncBadge('ok'); return; }
+    const remote = snap.data();
+    if (!remote.cobros) remote.cobros = [];
+    localStorage.setItem('inv_data', JSON.stringify(remote));
+    rerenderActive();
     showSyncBadge('ok');
-    return null;
-  } catch(e) { showSyncBadge('error'); return null; }
+  }, (err) => {
+    showSyncBadge('error');
+    console.error('Sync error:', err);
+  });
+}
+
+function rerenderActive() {
+  const active = document.querySelector('.page.active');
+  if (!active) return;
+  const name = active.id.replace('page-', '');
+  if      (name === 'inventario')  renderInventario();
+  else if (name === 'movimientos') renderMovimientos();
+  else if (name === 'cobros')      renderCobros();
+  else if (name === 'gestion')     renderGestion();
 }
 
 async function pushToCloud(data) {
@@ -737,7 +767,10 @@ async function pushToCloud(data) {
     showSyncBadge('syncing');
     await STATE_REF.set(data);
     showSyncBadge('ok');
-  } catch(e) { showSyncBadge('error'); }
+  } catch(e) {
+    showSyncBadge('error');
+    console.error('Push error:', e);
+  }
 }
 
 function schedulePush(data) {
@@ -1191,8 +1224,7 @@ function spawnConfirm(title, body, confirmLabel, onConfirm, danger=false) {
 // ═══════════════════════════════════════
 function exportarDatos() {
   const data    = getData();
-  const creds   = getCreds();
-  const backup  = { version: 1, fecha: new Date().toISOString(), data, creds };
+  const backup  = { version: 2, fecha: new Date().toISOString(), data };
   const blob    = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const url     = URL.createObjectURL(blob);
   const fecha   = new Date().toISOString().slice(0, 10);
@@ -1218,7 +1250,6 @@ function importarDatos(event) {
         'Importar',
         () => {
           saveData(backup.data);
-          if (backup.creds) saveCreds(backup.creds.user, backup.creds.pass);
           renderInventario();
           closeConfig();
           showToast('✅ Datos importados correctamente');
@@ -1352,21 +1383,36 @@ function saveNewCobro() {
 // ═══════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════
-async function initApp() {
+function initApp() {
   document.getElementById('header-date').textContent =
     new Date().toLocaleDateString('es-CO', {day:'2-digit', month:'short'}).toUpperCase();
   renderInventario();
-  const remote = await loadFromCloud();
-  if (remote) renderInventario();
+  startCloudSync();
 }
 
-window.addEventListener('DOMContentLoaded', async () => {
-  await syncCredsFromCloud();
-  if (isLoggedIn()) {
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('app').classList.add('visible');
-    initApp();
-  }
+let appInitialized = false;
+
+window.addEventListener('DOMContentLoaded', () => {
+  auth.onAuthStateChanged((user) => {
+    if (user) {
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('app').classList.add('visible');
+      document.getElementById('login-error').classList.remove('show');
+      if (!appInitialized) {
+        initApp();
+        appInitialized = true;
+      } else {
+        startCloudSync();
+      }
+    } else {
+      if (unsubscribeSync) { unsubscribeSync(); unsubscribeSync = null; }
+      document.getElementById('app').classList.remove('visible');
+      document.getElementById('login-screen').classList.remove('hidden');
+      document.getElementById('login-user').value = '';
+      document.getElementById('login-pass').value = '';
+      document.getElementById('login-error').classList.remove('show');
+    }
+  });
 });
 </script>
 </body>

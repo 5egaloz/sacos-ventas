@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebase';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
+import type { User } from 'firebase/auth';
+import { db, auth, googleProvider, isFirebaseConfigured } from './firebase';
 
 type PaymentStatus = 'contado' | 'transferencia' | 'pendiente';
 
@@ -18,21 +20,35 @@ const LS_INV = 'ventas-lena-inv';
 const FS_DOC = 'data';
 const FS_COL = 'ventas-sacos';
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
+
+const formatDate = (dateString: string) =>
+  new Date(dateString).toLocaleString('es-CL', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+
+const toMonthKey = (dateString: string) => {
+  const d = new Date(dateString);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleString('es-CL', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
+const monthLabel = (key: string) => {
+  const [y, m] = key.split('-');
+  return new Date(parseInt(y), parseInt(m) - 1).toLocaleString('es-CL', { month: 'long', year: 'numeric' });
 };
+
+type AppState = 'loading' | 'login' | 'ready';
 
 function App() {
-  const [loading, setLoading] = useState(isFirebaseConfigured);
+  const [appState, setAppState] = useState<AppState>(isFirebaseConfigured ? 'loading' : 'ready');
+  const [user, setUser] = useState<User | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const initialLoadDone = useRef(false);
+
+  // initialLoadDone starts true in localStorage-only mode so persist effect works immediately
+  const initialLoadDone = useRef(!isFirebaseConfigured);
+  const skipNextSave = useRef(false);
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     const saved = localStorage.getItem(LS_TX);
@@ -44,38 +60,68 @@ function App() {
     return saved ? parseInt(saved, 10) : 0;
   });
 
-  // Derived metrics
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [totalSacksSold, setTotalSacksSold] = useState(0);
-  const [pendingRevenue, setPendingRevenue] = useState(0);
-
-  // Load from Firestore on mount (overrides localStorage)
+  // Auth listener
   useEffect(() => {
-    if (!isFirebaseConfigured || !db) {
-      initialLoadDone.current = true;
-      return;
-    }
+    if (!isFirebaseConfigured || !auth) return;
 
-    getDoc(doc(db, FS_COL, FS_DOC))
-      .then(snapshot => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          setTransactions(data.transactions ?? []);
-          setInventory(data.inventory ?? 0);
-        }
-        initialLoadDone.current = true;
-      })
-      .catch(err => {
-        setSyncError('Error al conectar con la nube. Usando datos locales.');
-        console.error(err);
-        initialLoadDone.current = true;
-      })
-      .finally(() => setLoading(false));
+    return onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      // Transition: no user → login screen; user present → loading screen (data effect takes over)
+      setAppState(u ? 'loading' : 'login');
+    });
   }, []);
 
-  // Persist to localStorage + Firestore on every change
+  // Firestore real-time listener — set up/torn down on each login/logout
+  useEffect(() => {
+    if (!isFirebaseConfigured || !db || !user) return;
+
+    initialLoadDone.current = false;
+    skipNextSave.current = false;
+
+    const unsubscribe = onSnapshot(
+      doc(db, FS_COL, FS_DOC),
+      (snapshot) => {
+        // Skip snapshots caused by our own pending write to avoid save loops
+        if (snapshot.metadata.hasPendingWrites) return;
+
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          const txs: Transaction[] = data.transactions ?? [];
+          const inv: number = data.inventory ?? 0;
+          // Keep localStorage in sync so offline fallback stays fresh
+          localStorage.setItem(LS_TX, JSON.stringify(txs));
+          localStorage.setItem(LS_INV, String(inv));
+          skipNextSave.current = true;
+          setTransactions(txs);
+          setInventory(inv);
+        }
+
+        if (!initialLoadDone.current) {
+          initialLoadDone.current = true;
+          setAppState('ready');
+        }
+      },
+      (err) => {
+        setSyncError('Error al conectar con la nube. Usando datos locales.');
+        console.error(err);
+        if (!initialLoadDone.current) {
+          initialLoadDone.current = true;
+          setAppState('ready');
+        }
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Persist to localStorage + Firestore on every local change
   useEffect(() => {
     if (!initialLoadDone.current) return;
+    // Update came from Firestore — skip to avoid infinite save loop
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
 
     localStorage.setItem(LS_TX, JSON.stringify(transactions));
     localStorage.setItem(LS_INV, inventory.toString());
@@ -86,16 +132,37 @@ function App() {
       transactions,
       inventory,
       lastUpdated: new Date().toISOString(),
-    }).catch(err => {
-      setSyncError('Error al guardar en la nube.');
-      console.error(err);
-    });
+    })
+      .then(() => setSyncError(null))
+      .catch(err => {
+        setSyncError('Error al guardar en la nube.');
+        console.error(err);
+      });
   }, [transactions, inventory]);
 
-  // Calculate metrics
-  useEffect(() => {
+  // Form states
+  const [saleSacks, setSaleSacks] = useState<string>('');
+  const [salePrice, setSalePrice] = useState<string>('');
+  const [saleStatus, setSaleStatus] = useState<PaymentStatus>('contado');
+  const [restockAmount, setRestockAmount] = useState<string>('');
+
+  // History filter — must be declared before filteredTransactions and metrics
+  const [monthFilter, setMonthFilter] = useState<string>('all');
+
+  const availableMonths = useMemo(() => {
+    const months = new Set(transactions.map(tx => toMonthKey(tx.date)));
+    return Array.from(months).sort().reverse();
+  }, [transactions]);
+
+  const filteredTransactions = useMemo(() => {
+    if (monthFilter === 'all') return transactions;
+    return transactions.filter(tx => toMonthKey(tx.date) === monthFilter);
+  }, [transactions, monthFilter]);
+
+  // Metrics reflect the selected period (or all-time when filter is 'all')
+  const { totalRevenue, totalSacksSold, pendingRevenue } = useMemo(() => {
     let rev = 0, sacks = 0, pend = 0;
-    transactions.forEach(tx => {
+    filteredTransactions.forEach(tx => {
       if (tx.type === 'sale') {
         sacks += tx.sacks;
         if (tx.paymentStatus !== 'pendiente') {
@@ -105,16 +172,22 @@ function App() {
         }
       }
     });
-    setTotalRevenue(rev);
-    setTotalSacksSold(sacks);
-    setPendingRevenue(pend);
-  }, [transactions]);
+    return { totalRevenue: rev, totalSacksSold: sacks, pendingRevenue: pend };
+  }, [filteredTransactions]);
 
-  // Form states
-  const [saleSacks, setSaleSacks] = useState<string>('');
-  const [salePrice, setSalePrice] = useState<string>('');
-  const [saleStatus, setSaleStatus] = useState<PaymentStatus>('contado');
-  const [restockAmount, setRestockAmount] = useState<string>('');
+  const handleSignIn = async () => {
+    if (!auth) return;
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (e) {
+      console.error('Error al iniciar sesión:', e);
+    }
+  };
+
+  const handleSignOut = () => {
+    if (!auth) return;
+    signOut(auth);
+  };
 
   const handleSaleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,7 +199,7 @@ function App() {
       return;
     }
     const newTx: Transaction = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       date: new Date().toISOString(),
       type: 'sale',
       sacks: s,
@@ -145,7 +218,7 @@ function App() {
     const amount = parseInt(restockAmount);
     if (isNaN(amount) || amount <= 0) return;
     const newTx: Transaction = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       date: new Date().toISOString(),
       type: 'restock',
       sacks: amount,
@@ -156,26 +229,41 @@ function App() {
   };
 
   const handleDelete = (id: string, type: 'sale' | 'restock', sacks: number) => {
+    if (type === 'restock' && inventory - sacks < 0) {
+      alert(
+        `No puedes eliminar este ingreso: el inventario quedaría en ${inventory - sacks} sacos.\n` +
+        `Elimina primero las ventas correspondientes.`
+      );
+      return;
+    }
     if (window.confirm('¿Estás seguro de que quieres eliminar este registro? Esto ajustará tu inventario.')) {
       setTransactions(prev => prev.filter(tx => tx.id !== id));
-      if (type === 'sale') {
-        setInventory(prev => prev + sacks);
-      } else {
-        setInventory(prev => prev - sacks);
-      }
+      setInventory(prev => type === 'sale' ? prev + sacks : prev - sacks);
     }
   };
 
   const handlePaymentStatusChange = (id: string, newStatus: PaymentStatus) => {
-    setTransactions(prev => prev.map(tx =>
-      tx.id === id ? { ...tx, paymentStatus: newStatus } : tx
-    ));
+    setTransactions(prev =>
+      prev.map(tx => tx.id === id ? { ...tx, paymentStatus: newStatus } : tx)
+    );
   };
 
-  if (loading) {
+  if (appState === 'loading') {
     return (
       <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Cargando datos desde la nube...</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Cargando...</p>
+      </div>
+    );
+  }
+
+  if (appState === 'login') {
+    return (
+      <div className="app-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1.5rem' }}>
+        <h1 style={{ marginBottom: 0 }}>🌲 Gestión de Ventas de Leña</h1>
+        <p style={{ color: 'var(--text-muted)' }}>Inicia sesión para acceder a tus datos</p>
+        <button onClick={handleSignIn} style={{ padding: '12px 28px', fontSize: '1rem' }}>
+          Iniciar sesión con Google
+        </button>
       </div>
     );
   }
@@ -184,22 +272,39 @@ function App() {
     <div className="app-container">
       <h1>🌲 Gestión de Ventas de Leña</h1>
 
-      {/* Sync status indicator */}
-      <div style={{ textAlign: 'center', marginBottom: '0.5rem', fontSize: '0.78rem' }}>
-        {syncError ? (
-          <span style={{ color: 'var(--danger)' }}>⚠️ {syncError}</span>
-        ) : isFirebaseConfigured ? (
-          <span style={{ color: 'var(--success)' }}>☁️ Datos guardados en la nube</span>
-        ) : (
-          <span style={{ color: 'var(--text-muted)' }}>💾 Guardando solo en este dispositivo</span>
+      {/* Sync status + user info */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', fontSize: '0.78rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <span>
+          {syncError
+            ? <span style={{ color: 'var(--danger)' }}>⚠️ {syncError}</span>
+            : isFirebaseConfigured
+              ? <span style={{ color: 'var(--success)' }}>☁️ Datos guardados en la nube</span>
+              : <span style={{ color: 'var(--text-muted)' }}>💾 Guardando solo en este dispositivo</span>
+          }
+        </span>
+        {user && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
+            {user.displayName ?? user.email}
+            <button
+              onClick={handleSignOut}
+              style={{ fontSize: '0.75rem', padding: '3px 10px', backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid currentColor' }}
+            >
+              Salir
+            </button>
+          </span>
         )}
+      </div>
+
+      {/* Period label for dashboard */}
+      <div style={{ textAlign: 'center', marginBottom: '0.4rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+        {monthFilter === 'all' ? 'Totales históricos' : `Período: ${monthLabel(monthFilter)}`}
       </div>
 
       <div className="dashboard-grid">
         <div className="stat-card">
           <h3>Inventario</h3>
-          <div className="value" style={{color: inventory < 10 ? 'var(--danger)' : 'var(--primary-color)'}}>
-            {inventory} <span style={{fontSize: '1rem', color: 'var(--text-muted)'}}>sacos</span>
+          <div className="value" style={{ color: inventory < 10 ? 'var(--danger)' : 'var(--primary-color)' }}>
+            {inventory} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>sacos</span>
           </div>
         </div>
         <div className="stat-card">
@@ -207,12 +312,12 @@ function App() {
           <div className="value">{totalSacksSold}</div>
         </div>
         <div className="stat-card">
-          <h3>Ingresos Totales</h3>
-          <div className="value" style={{color: 'var(--success)'}}>{formatCurrency(totalRevenue)}</div>
+          <h3>Ingresos Cobrados</h3>
+          <div className="value" style={{ color: 'var(--success)' }}>{formatCurrency(totalRevenue)}</div>
         </div>
         <div className="stat-card">
           <h3>Cobros Pendientes</h3>
-          <div className="value" style={{color: 'var(--danger)'}}>{formatCurrency(pendingRevenue)}</div>
+          <div className="value" style={{ color: 'var(--danger)' }}>{formatCurrency(pendingRevenue)}</div>
         </div>
       </div>
 
@@ -226,6 +331,7 @@ function App() {
               value={saleSacks}
               onChange={e => setSaleSacks(e.target.value)}
               placeholder="Ej: 5"
+              min="1"
               required
             />
           </label>
@@ -236,6 +342,7 @@ function App() {
               value={salePrice}
               onChange={e => setSalePrice(e.target.value)}
               placeholder="Ej: 20000"
+              min="0"
               required
             />
           </label>
@@ -259,17 +366,35 @@ function App() {
               value={restockAmount}
               onChange={e => setRestockAmount(e.target.value)}
               placeholder="Ej: 50"
+              min="1"
               required
             />
           </label>
-          <button type="submit" style={{backgroundColor: 'var(--success)', marginTop: 'auto'}}>Añadir Leña</button>
+          <button type="submit" style={{ backgroundColor: 'var(--success)', marginTop: 'auto' }}>Añadir Leña</button>
         </form>
       </div>
 
       <div className="history-section">
-        <h2>Historial Reciente</h2>
-        {transactions.length === 0 ? (
-          <div className="empty-state">No hay movimientos registrados aún. Empieza anotando leña o una venta.</div>
+        <h2>
+          Historial
+          <select
+            value={monthFilter}
+            onChange={e => setMonthFilter(e.target.value)}
+            style={{ fontSize: '0.85rem', fontWeight: 'normal', padding: '4px 8px', borderRadius: '8px', border: '1px solid #d1d5db' }}
+          >
+            <option value="all">Todos los meses</option>
+            {availableMonths.map(m => (
+              <option key={m} value={m}>{monthLabel(m)}</option>
+            ))}
+          </select>
+        </h2>
+
+        {filteredTransactions.length === 0 ? (
+          <div className="empty-state">
+            {monthFilter === 'all'
+              ? 'No hay movimientos registrados aún. Empieza anotando leña o una venta.'
+              : 'No hay movimientos para este período.'}
+          </div>
         ) : (
           <table>
             <thead>
@@ -278,24 +403,27 @@ function App() {
                 <th>Movimiento</th>
                 <th>Cantidad</th>
                 <th>Total ($)</th>
+                <th>$/Saco</th>
                 <th>Estado</th>
                 <th>Acción</th>
               </tr>
             </thead>
             <tbody>
-              {transactions.map(tx => (
+              {filteredTransactions.map(tx => (
                 <tr key={tx.id}>
                   <td>{formatDate(tx.date)}</td>
                   <td>{tx.type === 'sale' ? 'Venta' : 'Ingreso Inventario'}</td>
                   <td>
-                    {tx.type === 'sale' ? (
-                      <span style={{color: 'var(--danger)', fontWeight: 'bold'}}>-{tx.sacks}</span>
-                    ) : (
-                      <span style={{color: 'var(--success)', fontWeight: 'bold'}}>+{tx.sacks}</span>
-                    )}
+                    {tx.type === 'sale'
+                      ? <span style={{ color: 'var(--danger)', fontWeight: 'bold' }}>-{tx.sacks}</span>
+                      : <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>+{tx.sacks}</span>
+                    }
                   </td>
+                  <td>{tx.type === 'sale' ? formatCurrency(tx.totalPrice || 0) : '-'}</td>
                   <td>
-                    {tx.type === 'sale' ? formatCurrency(tx.totalPrice || 0) : '-'}
+                    {tx.type === 'sale' && tx.sacks > 0
+                      ? formatCurrency(Math.round((tx.totalPrice || 0) / tx.sacks))
+                      : '-'}
                   </td>
                   <td>
                     {tx.type === 'sale' && tx.paymentStatus && (
@@ -312,7 +440,7 @@ function App() {
                           color: tx.paymentStatus === 'contado' ? '#166534' : tx.paymentStatus === 'transferencia' ? '#1e40af' : '#991b1b',
                           border: 'none',
                           outline: 'none',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
                         }}
                       >
                         <option value="contado">CONTADO</option>
@@ -324,7 +452,7 @@ function App() {
                   <td>
                     <button
                       onClick={() => handleDelete(tx.id, tx.type, tx.sacks)}
-                      style={{backgroundColor: 'transparent', color: 'var(--danger)', padding: '4px 8px', fontSize: '0.8rem'}}
+                      style={{ backgroundColor: 'transparent', color: 'var(--danger)', padding: '4px 8px', fontSize: '0.8rem' }}
                     >
                       ❌
                     </button>
